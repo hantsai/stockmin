@@ -199,10 +199,8 @@ function AnalysisModal({stock,onClose}){
 現價：${sym}${stock.price}　今日：${stock.pct>0?"+":""}${stock.pct}%　區間：${sym}${stock.low}–${sym}${stock.high}
 請包含：① 今日走勢 ② 主要風險 ③ 操作建議。語氣專業簡潔。`;
       try{
-        for await(const chunk of streamAnalysis(prompt)){
-          if(cancelled) break;
-          setText(p=>p+chunk);
-        }
+        const result = await streamAnalysis(prompt);
+        if(!cancelled) setText(result);
       }catch{if(!cancelled)setText("⚠️ 分析暫時無法使用");}
       if(!cancelled)setLoading(false);
     })();
@@ -294,7 +292,7 @@ export default function App(){
 ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.price}`).join("\n")}`;
     try{
       let fullText="";
-      for await(const chunk of streamAnalysis(prompt)) fullText+=chunk;
+      fullText = await streamAnalysis(prompt);
       const clean=fullText.replace(/```json|```/g,"").trim();
       const parsed=JSON.parse(clean);
       const enrich=arr=>arr.map(r=>({...r,pct:stocks[r.ticker]?.pct??r.pct,real:stocks[r.ticker]?.real??false}));
