@@ -442,6 +442,9 @@ export default function App(){
   const[editing,setEditing]=useState(false);
   const[lastFetch,setLastFetch]=useState(null);
   const[autoRefresh,setAutoRefresh]=useState(false);
+  const[refreshInterval,setRefreshInterval]=useState(30); // 預設30秒
+  const[showIntervalPicker,setShowIntervalPicker]=useState(false);
+
   // AI 推薦
   const[recs,setRecs]=useState(null);
   const[recsLoad,setRecsLoad]=useState(false);
@@ -468,9 +471,9 @@ export default function App(){
   useEffect(()=>{refresh(tickers);},[tickers]);
   useEffect(()=>{
     if(!autoRefresh) return;
-    const id=setInterval(()=>refresh(tickers),10000);
+    const id=setInterval(()=>refresh(tickers),refreshInterval*1000);
     return()=>clearInterval(id);
-  },[autoRefresh,tickers]);
+  },[autoRefresh,refreshInterval,tickers]);
 
   const addStock=useCallback((ticker,data)=>{
     setTickers(prev=>{const next=[...prev,ticker];saveWatchlist(next);return next;});
@@ -780,9 +783,26 @@ ${details}`;
                   {editing?"完成":"✎ 編輯"}
                 </button>
                 <button onClick={()=>refresh(tickers)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>↻ 刷新</button>
-                <button onClick={()=>setAutoRefresh(a=>!a)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${autoRefresh?C.green:C.border}`,background:autoRefresh?C.greenBg:"transparent",color:autoRefresh?C.green:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                  {autoRefresh?"⏹ 停止":"⏱ 自動"}
+                <button onClick={()=>autoRefresh?setAutoRefresh(false):setShowIntervalPicker(true)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${autoRefresh?C.green:C.border}`,background:autoRefresh?C.greenBg:"transparent",color:autoRefresh?C.green:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  {autoRefresh?`⏹ ${refreshInterval}s`:"⏱ 自動"}
                 </button>
+                {showIntervalPicker&&(
+                  <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>setShowIntervalPicker(false)}>
+                    <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none"}} onClick={e=>e.stopPropagation()}>
+                      <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
+                      <div style={{fontSize:16,fontWeight:800,color:C.text,marginBottom:16}}>自動刷新間隔</div>
+                      {[10,30,60,120,300].map(sec=>(
+                        <button key={sec} onClick={()=>{setRefreshInterval(sec);setAutoRefresh(true);setShowIntervalPicker(false);}} style={{width:"100%",padding:"14px 16px",borderRadius:12,border:`1px solid ${refreshInterval===sec&&autoRefresh?C.green:C.border}`,background:refreshInterval===sec&&autoRefresh?C.greenBg:C.card,color:refreshInterval===sec&&autoRefresh?C.green:C.text,fontWeight:700,fontSize:14,cursor:"pointer",marginBottom:8,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span>{sec<60?`${sec} 秒`:sec===60?"1 分鐘":sec===120?"2 分鐘":"5 分鐘"}</span>
+                          {refreshInterval===sec&&autoRefresh&&<span style={{fontSize:12,color:C.green}}>✓ 使用中</span>}
+                        </button>
+                      ))}
+                      <button onClick={()=>{setAutoRefresh(false);setShowIntervalPicker(false);}} style={{width:"100%",padding:"14px 16px",borderRadius:12,border:`1px solid ${C.redBd}`,background:C.redBg,color:C.red,fontWeight:700,fontSize:14,cursor:"pointer",marginTop:4}}>
+                        ⏹ 關閉自動刷新
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <button onClick={()=>setAddOpen(true)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${C.greenBd}`,background:C.greenBg,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>＋ 新增</button>
             </div>
