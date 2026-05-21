@@ -109,35 +109,31 @@ function WatchCard({s,onTap,onRemove,editing}){
   const sym=s.currency==="TWD"?"NT$":"$";
   const rangePct=s.high>s.low?((s.price-s.low)/(s.high-s.low))*100:50;
   return(
-    <div style={{position:"relative",marginBottom:10}}>
+    <div style={{position:"relative",marginBottom:6}}>
       {editing&&(
-        <button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-6,left:-6,zIndex:10,width:22,height:22,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 8px ${C.red}`}}>−</button>
+        <button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
       )}
-      <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:18,padding:"16px 18px",cursor:editing?"default":"pointer"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{fontSize:16,fontWeight:800,color:C.text}}>{s.name}</div>
-              {!s.real&&<div style={{fontSize:9,color:C.gold,border:`1px solid ${C.gold}`,borderRadius:4,padding:"1px 5px"}}>模擬</div>}
-            </div>
-            <div style={{fontSize:11,color:C.sub,marginTop:2,fontFamily:C.mono}}>{s.ticker}</div>
-          </div>
-          <div style={{fontSize:20,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{s.price.toLocaleString()}</div>
+      <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"10px 14px",cursor:editing?"default":"pointer",display:"flex",alignItems:"center",gap:10}}>
+        {/* 左：名稱+代號 */}
+        <div style={{width:72,flexShrink:0}}>
+          <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+          <div style={{fontSize:10,color:C.sub,fontFamily:C.mono,marginTop:1}}>{s.ticker.replace(".TW","")}</div>
         </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+        {/* 中：走勢圖 */}
+        <div style={{flex:1,minWidth:0}}>
           <Spark data={s.sparkline} color={col}/>
-          <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:"5px 12px",display:"flex",alignItems:"center",gap:4}}>
-            <span style={{fontSize:16}}>{up?"▲":"▼"}</span>
-            <span style={{fontSize:17,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
+          {/* 日內區間條 */}
+          <div style={{height:3,borderRadius:99,background:C.dim,position:"relative",marginTop:3}}>
+            <div style={{height:"100%",width:`${rangePct}%`,background:`linear-gradient(90deg,${C.dim},${col})`,borderRadius:99}}/>
+            <div style={{position:"absolute",left:`${rangePct}%`,transform:"translateX(-50%)",top:-2,width:7,height:7,borderRadius:"50%",background:col,boxShadow:`0 0 5px ${col}`}}/>
           </div>
         </div>
-        <div style={{marginTop:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.sub,marginBottom:4}}>
-            <span>低 {sym}{s.low}</span><span>高 {sym}{s.high}</span>
-          </div>
-          <div style={{height:4,borderRadius:99,background:C.dim,position:"relative"}}>
-            <div style={{height:"100%",width:`${rangePct}%`,background:`linear-gradient(90deg,${C.dim},${col})`,borderRadius:99}}/>
-            <div style={{position:"absolute",left:`${rangePct}%`,transform:"translateX(-50%)",top:-3,width:10,height:10,borderRadius:"50%",background:col,boxShadow:`0 0 8px ${col}`}}/>
+        {/* 右：價格+漲跌 */}
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{s.price.toLocaleString()}</div>
+          <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 7px",marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:11}}>{up?"▲":"▼"}</span>
+            <span style={{fontSize:12,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
           </div>
         </div>
       </div>
