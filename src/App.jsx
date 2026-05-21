@@ -1,4 +1,4 @@
-// StockMin — src/App.jsx
+ // StockMin — src/App.jsx
 // Real Yahoo Finance + Anthropic AI + localStorage watchlist
 import { useState, useRef, useEffect, useCallback } from "react";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
@@ -327,14 +327,23 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
     setRecsLoad(false);
   };
 
-  const MARKET_TICKERS = ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","NVDA","AAPL","TSLA","MSFT","GOOGL"];
+  // const MARKET_TICKERS = ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","NVDA","AAPL","TSLA","MSFT","GOOGL"];
+
+  const ALL_MARKET_TICKERS = [
+    "2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","2303.TW","2882.TW","2881.TW",
+    "2886.TW","2891.TW","2357.TW","2382.TW","6285.TW","2301.TW","2327.TW","2376.TW",
+    "3008.TW","2344.TW","6669.TW","2603.TW","2609.TW","2002.TW","1301.TW","2412.TW",
+    "3045.TW","2884.TW","2892.TW","5880.TW","2885.TW","2395.TW","2049.TW","2337.TW",
+  ];
 
   const generateMarketRecs=async()=>{
     setMarketLoad(true);
     // 先抓市場股價
-    const results=await Promise.all(MARKET_TICKERS.map(fetchQuote));
+    // 排除已在自選股的標的，取前10檔
+    const filtered=ALL_MARKET_TICKERS.filter(t=>!tickers.includes(t)).slice(0,10);
+    const results=await Promise.all(filtered.map(fetchQuote));
     const map={};
-    results.forEach((d,i)=>{if(d)map[MARKET_TICKERS[i]]=d;});
+    results.forEach((d,i)=>{if(d)map[filtered[i]]=d;});
     setMarketStocks(map);
     const list=Object.values(map);
     if(!list.length){setMarketLoad(false);return;}
