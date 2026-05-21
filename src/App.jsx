@@ -273,6 +273,9 @@ export default function App(){
   const[recsLoad,setRecsLoad]=useState(false);
   const[lastFetch,setLastFetch]=useState(null);
   const[autoRefresh,setAutoRefresh]=useState(false);
+  const[marketRecs,setMarketRecs]=useState(null);
+  const[marketLoad,setMarketLoad]=useState(false);
+  const[marketStocks,setMarketStocks]=useState({});
 
   const refresh=useCallback(async(list)=>{
     if(!list.length) return;
@@ -324,6 +327,33 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
     setRecsLoad(false);
   };
 
+  const MARKET_TICKERS = ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","NVDA","AAPL","TSLA","MSFT","GOOGL"];
+
+  const generateMarketRecs=async()=>{
+    setMarketLoad(true);
+    // 先抓市場股價
+    const results=await Promise.all(MARKET_TICKERS.map(fetchQuote));
+    const map={};
+    results.forEach((d,i)=>{if(d)map[MARKET_TICKERS[i]]=d;});
+    setMarketStocks(map);
+    const list=Object.values(map);
+    if(!list.length){setMarketLoad(false);return;}
+    const prompt=`你是專業股票分析師。根據以下市場熱門股今日表現，給出買入與減碼建議（繁體中文）。
+  只回傳 JSON，格式：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"20字內"}],"sell":[...]}
+  不要有 markdown，純 JSON。
+  
+  股票資料：
+  ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.price}`).join("\n")}`;
+    try{
+      const fullText=await streamAnalysis(prompt);
+      const clean=fullText.replace(/```json|```/g,"").trim();
+      const parsed=JSON.parse(clean);
+      const enrich=arr=>arr.map(r=>({...r,pct:map[r.ticker]?.pct??r.pct}));
+      setMarketRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
+    }catch{setMarketRecs({buy:[],sell:[],error:true});}
+    setMarketLoad(false);
+  };
+
   const watchData=tickers.map(t=>stocks[t]).filter(Boolean);
   const upCount=watchData.filter(s=>s.pct>=0).length;
   const downCount=watchData.filter(s=>s.pct<0).length;
@@ -371,45 +401,97 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
         {/* AI 推薦 */}
         {tab==="ai"&&(
           <>
-            <button onClick={generateRecs} disabled={recsLoad||watchData.length===0} style={{width:"100%",padding:"14px 0",borderRadius:14,border:"none",background:recsLoad?C.dim:C.green,color:recsLoad?C.sub:C.bg,fontWeight:800,fontSize:15,cursor:recsLoad?"default":"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              {recsLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:recs?"↻ 重新分析":"✦ 開始 AI 分析"}
-            </button>
-            {!recs&&!recsLoad&&(
-              <div style={{background:C.card,border:`1px dashed ${C.border}`,borderRadius:20,padding:40,textAlign:"center"}}>
-                <div style={{fontSize:32,marginBottom:12}}>✦</div>
-                <div style={{fontSize:14,color:C.sub,lineHeight:1.8}}>點擊上方按鈕<br/>AI 將根據你的自選股<br/>給出買入與減碼建議</div>
+            {/* ── 市場熱門 ── */}
+            <div style={{marginBottom:24}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <div style={{width:3,height:18,borderRadius:99,background:C.gold}}/>
+                <span style={{fontSize:14,fontWeight:800,color:C.gold}}>市場熱門</span>
+                <div style={{flex:1,height:1,background:"rgba(255,181,71,0.25)"}}/>
+                <span style={{fontSize:10,color:C.sub}}>台積電 聯發科 NVDA 等10檔</span>
               </div>
-            )}
-            {recs&&!recsLoad&&(
-              <>
-                {recs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
-                {recs.buy?.length>0&&(
-                  <div style={{marginBottom:24}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                      <div style={{width:3,height:18,borderRadius:99,background:C.green}}/>
-                      <span style={{fontSize:14,fontWeight:800,color:C.green}}>建議買入</span>
-                      <div style={{flex:1,height:1,background:C.greenBd}}/>
-                      <span style={{fontSize:11,color:C.sub}}>{recs.buy.length} 檔</span>
+              <button onClick={generateMarketRecs} disabled={marketLoad} style={{width:"100%",padding:"12px 0",borderRadius:14,border:`1px solid rgba(255,181,71,0.3)`,background:marketLoad?C.dim:C.goldBg,color:marketLoad?C.sub:C.gold,fontWeight:800,fontSize:14,cursor:marketLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                {marketLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:marketRecs?"↻ 重新分析市場":"✦ 分析市場熱門股"}
+              </button>
+              {marketRecs&&!marketLoad&&(
+                <>
+                  {marketRecs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
+                  {marketRecs.buy?.length>0&&(
+                    <div style={{marginBottom:16}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:3,height:14,borderRadius:99,background:C.green}}/>
+                        <span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span>
+                        <div style={{flex:1,height:1,background:C.greenBd}}/>
+                        <span style={{fontSize:11,color:C.sub}}>{marketRecs.buy.length} 檔</span>
+                      </div>
+                      {marketRecs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}
                     </div>
-                    {recs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}
-                  </div>
-                )}
-                {recs.sell?.length>0&&(
-                  <div style={{marginBottom:20}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                      <div style={{width:3,height:18,borderRadius:99,background:C.red}}/>
-                      <span style={{fontSize:14,fontWeight:800,color:C.red}}>建議減碼</span>
-                      <div style={{flex:1,height:1,background:C.redBd}}/>
-                      <span style={{fontSize:11,color:C.sub}}>{recs.sell.length} 檔</span>
+                  )}
+                  {marketRecs.sell?.length>0&&(
+                    <div style={{marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:3,height:14,borderRadius:99,background:C.red}}/>
+                        <span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span>
+                        <div style={{flex:1,height:1,background:C.redBd}}/>
+                        <span style={{fontSize:11,color:C.sub}}>{marketRecs.sell.length} 檔</span>
+                      </div>
+                      {marketRecs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}
                     </div>
-                    {recs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}
-                  </div>
-                )}
-                <div style={{background:C.goldBg,border:`1px solid rgba(255,181,71,0.2)`,borderRadius:12,padding:"10px 14px"}}>
-                  <div style={{fontSize:11,color:C.gold,lineHeight:1.6}}>⚠️ AI 建議僅供參考，投資請自行評估風險</div>
+                  )}
+                </>
+              )}
+            </div>
+        
+            {/* 分隔線 */}
+            <div style={{height:1,background:C.border,marginBottom:24}}/>
+        
+            {/* ── 我的自選股 ── */}
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <div style={{width:3,height:18,borderRadius:99,background:C.green}}/>
+                <span style={{fontSize:14,fontWeight:800,color:C.text}}>我的自選股</span>
+                <div style={{flex:1,height:1,background:C.border}}/>
+                <span style={{fontSize:10,color:C.sub}}>{watchData.length} 檔</span>
+              </div>
+              <button onClick={generateRecs} disabled={recsLoad||watchData.length===0} style={{width:"100%",padding:"12px 0",borderRadius:14,border:"none",background:recsLoad?C.dim:C.green,color:recsLoad?C.sub:C.bg,fontWeight:800,fontSize:14,cursor:recsLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                {recsLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:recs?"↻ 重新分析自選股":"✦ 分析我的自選股"}
+              </button>
+              {!recs&&!recsLoad&&(
+                <div style={{background:C.card,border:`1px dashed ${C.border}`,borderRadius:16,padding:24,textAlign:"center"}}>
+                  <div style={{fontSize:13,color:C.sub,lineHeight:1.8}}>點擊上方按鈕<br/>AI 將根據你的自選股給出建議</div>
                 </div>
-              </>
-            )}
+              )}
+              {recs&&!recsLoad&&(
+                <>
+                  {recs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
+                  {recs.buy?.length>0&&(
+                    <div style={{marginBottom:16}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:3,height:14,borderRadius:99,background:C.green}}/>
+                        <span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span>
+                        <div style={{flex:1,height:1,background:C.greenBd}}/>
+                        <span style={{fontSize:11,color:C.sub}}>{recs.buy.length} 檔</span>
+                      </div>
+                      {recs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}
+                    </div>
+                  )}
+                  {recs.sell?.length>0&&(
+                    <div style={{marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:3,height:14,borderRadius:99,background:C.red}}/>
+                        <span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span>
+                        <div style={{flex:1,height:1,background:C.redBd}}/>
+                        <span style={{fontSize:11,color:C.sub}}>{recs.sell.length} 檔</span>
+                      </div>
+                      {recs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+        
+            <div style={{background:C.goldBg,border:`1px solid rgba(255,181,71,0.2)`,borderRadius:12,padding:"10px 14px",marginTop:16}}>
+              <div style={{fontSize:11,color:C.gold,lineHeight:1.6}}>⚠️ AI 建議僅供參考，投資請自行評估風險</div>
+            </div>
           </>
         )}
 
