@@ -272,6 +272,7 @@ export default function App(){
   const[recs,setRecs]=useState(null);
   const[recsLoad,setRecsLoad]=useState(false);
   const[lastFetch,setLastFetch]=useState(null);
+  const[autoRefresh,setAutoRefresh]=useState(false);
 
   const refresh=useCallback(async(list)=>{
     if(!list.length) return;
@@ -284,11 +285,13 @@ export default function App(){
     setLastFetch(new Date());
   },[]);
 
+  useEffect(()=>{ refresh(tickers); },[tickers]);
+
   useEffect(()=>{
-    refresh(tickers);
-    const id=setInterval(()=>refresh(tickers),60000);
+    if(!autoRefresh) return;
+    const id=setInterval(()=>refresh(tickers),10000);
     return()=>clearInterval(id);
-  },[tickers]);
+  },[autoRefresh,tickers]);
 
   const addStock=useCallback((ticker,data)=>{
     setTickers(prev=>{const next=[...prev,ticker];saveWatchlist(next);return next;});
@@ -432,11 +435,19 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <button onClick={()=>setEditing(e=>!e)} style={{padding:"6px 14px",borderRadius:99,border:`1px solid ${editing?C.red:C.border}`,background:editing?C.redBg:"transparent",color:editing?C.red:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                {editing?"完成編輯":"✎ 編輯"}
-              </button>
-              <button onClick={()=>setAddOpen(true)} style={{padding:"6px 14px",borderRadius:99,border:`1px solid ${C.greenBd}`,background:C.greenBg,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                ＋ 新增股票
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setEditing(e=>!e)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${editing?C.red:C.border}`,background:editing?C.redBg:"transparent",color:editing?C.red:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  {editing?"完成":"✎ 編輯"}
+                </button>
+                <button onClick={()=>refresh(tickers)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  ↻ 刷新
+                </button>
+                <button onClick={()=>setAutoRefresh(a=>!a)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${autoRefresh?C.green:C.border}`,background:autoRefresh?C.greenBg:"transparent",color:autoRefresh?C.green:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  {autoRefresh?"⏹ 停止":"⏱ 自動"}
+                </button>
+              </div>
+              <button onClick={()=>setAddOpen(true)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${C.greenBd}`,background:C.greenBg,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                ＋ 新增
               </button>
             </div>
 
