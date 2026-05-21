@@ -5,8 +5,8 @@ import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 
 const C = {
   bg:"#080b12",surface:"#0d1120",card:"#111827",border:"#1c2540",
-  green:"#00e5a0",greenBg:"rgba(0,229,160,0.10)",greenBd:"rgba(0,229,160,0.25)",
-  red:"#ff3d6e",redBg:"rgba(255,61,110,0.10)",redBd:"rgba(255,61,110,0.25)",
+  green:"#ff3d6e",greenBg:"rgba(255,61,110,0.10)",greenBd:"rgba(255,61,110,0.25)",
+  red:"#00e5a0",redBg:"rgba(0,229,160,0.10)",redBd:"rgba(0,229,160,0.25)",
   gold:"#ffb547",goldBg:"rgba(255,181,71,0.10)",
   text:"#edf2ff",sub:"#8896b3",dim:"#1c2540",
   mono:"'Space Mono',monospace",sans:"'Outfit',sans-serif",
@@ -107,7 +107,6 @@ function Spark({data,color}){
 function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
-  const rangePct=s.high>s.low?((s.price-s.low)/(s.high-s.low))*100:50;
   return(
     <div style={{position:"relative",marginBottom:6}}>
       {editing&&(
@@ -122,11 +121,6 @@ function WatchCard({s,onTap,onRemove,editing}){
         {/* 中：走勢圖 */}
         <div style={{flex:1,minWidth:0}}>
           <Spark data={s.sparkline} color={col}/>
-          {/* 日內區間條 */}
-          <div style={{height:3,borderRadius:99,background:C.dim,position:"relative",marginTop:3}}>
-            <div style={{height:"100%",width:`${rangePct}%`,background:`linear-gradient(90deg,${C.dim},${col})`,borderRadius:99}}/>
-            <div style={{position:"absolute",left:`${rangePct}%`,transform:"translateX(-50%)",top:-2,width:7,height:7,borderRadius:"50%",background:col,boxShadow:`0 0 5px ${col}`}}/>
-          </div>
         </div>
         {/* 右：價格+漲跌 */}
         <div style={{textAlign:"right",flexShrink:0}}>
