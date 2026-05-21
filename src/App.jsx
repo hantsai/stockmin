@@ -1,22 +1,22 @@
- // StockMin — src/App.jsx
-// Real Yahoo Finance + Anthropic AI + localStorage watchlist
-import { useState, useRef, useEffect, useCallback } from "react";
+// StockMin — src/App.jsx
+// Real Yahoo Finance + News + Technicals + Anthropic AI + localStorage
+import { useState, useEffect, useCallback } from "react";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 
+// ── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
   bg:"#080b12",surface:"#0d1120",card:"#111827",border:"#1c2540",
   green:"#ff3d6e",greenBg:"rgba(255,61,110,0.10)",greenBd:"rgba(255,61,110,0.25)",
   red:"#00e5a0",redBg:"rgba(0,229,160,0.10)",redBd:"rgba(0,229,160,0.25)",
-  gold:"#ffb547",goldBg:"rgba(255,181,71,0.10)",
+  gold:"#ffb547",goldBg:"rgba(255,181,71,0.10)",goldBd:"rgba(255,181,71,0.25)",
+  blue:"#60a5fa",blueBg:"rgba(96,165,250,0.10)",
   text:"#edf2ff",sub:"#8896b3",dim:"#1c2540",
   mono:"'Space Mono',monospace",sans:"'Outfit',sans-serif",
 };
 
-// 台股中文名稱對照表
+// ── 台股中文名稱對照表 ────────────────────────────────────────────────────────
 const TW_NAMES = {
-  // ETF
   "0050.TW":"元大台灣50","0056.TW":"元大高股息",
-  // 0050 + 0056 成分股（2026/05/20 最新）
   "2330.TW":"台積電","2454.TW":"聯發科","2308.TW":"台達電","2317.TW":"鴻海",
   "3711.TW":"日月光投控","2303.TW":"聯電","6285.TW":"台光電","2634.TW":"欣興",
   "2494.TW":"奇鋐","2891.TW":"中信金","2882.TW":"國泰金","2884.TW":"玉山金",
@@ -43,28 +43,27 @@ const TW_NAMES = {
 
 const DEFAULT_TICKERS = ["2330.TW","2454.TW","1802.TW","2408.TW","2458.TW","3231.TW","8069.TW","AAPL","NVDA","TSLA"];
 
+// ── Mock fallback ─────────────────────────────────────────────────────────────
 function genMock(base,up){
   let v=base*0.96;
   return Array.from({length:24},()=>{v+=(Math.random()-(up?.42:.58))*base*.008;return{v:+v.toFixed(2)};}).concat([{v:base}]);
 }
-
 const MOCK_DATA = {
   "2330.TW":{name:"台積電",price:1045,pct:2.45,change:25,low:1018,high:1052,currency:"TWD"},
-  "2317.TW":{name:"鴻海",price:198,pct:-1.73,change:-3.5,low:195,high:202,currency:"TWD"},
   "2454.TW":{name:"聯發科",price:1580,pct:2.59,change:40,low:1540,high:1595,currency:"TWD"},
   "AAPL":{name:"Apple",price:213,pct:1.48,change:3.1,low:209,high:215,currency:"USD"},
   "NVDA":{name:"NVIDIA",price:1087,pct:-1.36,change:-15,low:1060,high:1105,currency:"USD"},
   "TSLA":{name:"Tesla",price:249,pct:3.62,change:8.7,low:238,high:252,currency:"USD"},
 };
 
-// ── API helpers ──────────────────────────────────────────────────────────────
+// ── API Helpers ───────────────────────────────────────────────────────────────
 async function fetchQuote(ticker) {
   try {
     const res = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`,{signal:AbortSignal.timeout(9000)});
     if(!res.ok) throw new Error("api error");
     const d = await res.json();
     if(!d.sparkline) d.sparkline = genMock(d.price, d.pct>=0);
-    if (d && d.ticker && TW_NAMES[d.ticker]) d.name = TW_NAMES[d.ticker];
+    if(d && d.ticker && TW_NAMES[d.ticker]) d.name = TW_NAMES[d.ticker];
     return d;
   } catch {
     const m = MOCK_DATA[ticker];
@@ -73,25 +72,58 @@ async function fetchQuote(ticker) {
   }
 }
 
-async function streamAnalysis(prompt) {
-  const res = await fetch("/api/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
-  });
-  if (!res.ok) throw new Error("API error");
-  const data = await res.json();
-  return data.text || "⚠️ 分析服務暫時無法使用";
+async function fetchTechnicals(ticker) {
+  try {
+    const res = await fetch(`/api/technicals?ticker=${encodeURIComponent(ticker)}`,{signal:AbortSignal.timeout(10000)});
+    if(!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
 }
 
-// ── localStorage watchlist ───────────────────────────────────────────────────
+async function fetchNews(name, ticker) {
+  try {
+    const res = await fetch(`/api/news?name=${encodeURIComponent(name)}&ticker=${encodeURIComponent(ticker)}`,{signal:AbortSignal.timeout(8000)});
+    if(!res.ok) return [];
+    const d = await res.json();
+    return d.news || [];
+  } catch { return []; }
+}
+
+async function fetchMarketTickers(exclude=[]) {
+  try {
+    const res = await fetch(`/api/market?exclude=${exclude.join(",")}`,{signal:AbortSignal.timeout(8000)});
+    if(!res.ok) throw new Error();
+    const d = await res.json();
+    return d.tickers || [];
+  } catch {
+    // fallback 固定清單
+    const fallback = [
+      "2330.TW","2454.TW","2317.TW","3711.TW","2308.TW",
+      "2303.TW","2882.TW","2357.TW","2382.TW","2412.TW",
+    ];
+    return fallback.filter(t=>!exclude.includes(t)).slice(0,10);
+  }
+}
+
+async function callAI(prompt) {
+  const res = await fetch("/api/analyze",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({prompt}),
+  });
+  if(!res.ok) throw new Error("API error");
+  const data = await res.json();
+  return data.text || "";
+}
+
+// ── localStorage ──────────────────────────────────────────────────────────────
 function loadWatchlist(){
   try{const s=localStorage.getItem("stockmin:watchlist");return s?JSON.parse(s):DEFAULT_TICKERS;}
   catch{return DEFAULT_TICKERS;}
 }
 function saveWatchlist(t){try{localStorage.setItem("stockmin:watchlist",JSON.stringify(t));}catch{}}
 
-// ── Sparkline ────────────────────────────────────────────────────────────────
+// ── Sparkline ─────────────────────────────────────────────────────────────────
 function Spark({data,color}){
   return(
     <ResponsiveContainer width={64} height={32}>
@@ -103,7 +135,17 @@ function Spark({data,color}){
   );
 }
 
-// ── WatchCard ────────────────────────────────────────────────────────────────
+// ── TechBadge ─────────────────────────────────────────────────────────────────
+function TechBadge({label,value,color}){
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+      <div style={{fontSize:9,color:C.sub,marginBottom:1}}>{label}</div>
+      <div style={{fontSize:11,fontWeight:800,color:color||C.text,fontFamily:C.mono}}>{value}</div>
+    </div>
+  );
+}
+
+// ── WatchCard ─────────────────────────────────────────────────────────────────
 function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
@@ -113,16 +155,13 @@ function WatchCard({s,onTap,onRemove,editing}){
         <button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
       )}
       <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"10px 14px",cursor:editing?"default":"pointer",display:"flex",alignItems:"center",gap:10}}>
-        {/* 左：名稱+代號 */}
         <div style={{width:72,flexShrink:0}}>
           <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
           <div style={{fontSize:10,color:C.sub,fontFamily:C.mono,marginTop:1}}>{s.ticker.replace(".TW","")}</div>
         </div>
-        {/* 中：走勢圖 */}
         <div style={{flex:1,minWidth:0}}>
           <Spark data={s.sparkline} color={col}/>
         </div>
-        {/* 右：價格+漲跌 */}
         <div style={{textAlign:"right",flexShrink:0}}>
           <div style={{fontSize:14,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{s.price.toLocaleString()}</div>
           <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 7px",marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}>
@@ -135,7 +174,7 @@ function WatchCard({s,onTap,onRemove,editing}){
   );
 }
 
-// ── RecCard ──────────────────────────────────────────────────────────────────
+// ── RecCard ───────────────────────────────────────────────────────────────────
 function RecCard({r,type}){
   const isBuy=type==="buy",col=isBuy?C.green:C.red,bg=isBuy?C.greenBg:C.redBg,bd=isBuy?C.greenBd:C.redBd;
   const up=r.pct>=0;
@@ -149,12 +188,22 @@ function RecCard({r,type}){
         <div style={{position:"relative",width:44,height:44}}>
           <svg width="44" height="44" viewBox="0 0 44 44" style={{transform:"rotate(-90deg)"}}>
             <circle cx="22" cy="22" r="18" fill="none" stroke={C.dim} strokeWidth="3"/>
-            <circle cx="22" cy="22" r="18" fill="none" stroke={col} strokeWidth="3" strokeDasharray={`${2*Math.PI*18*r.conf/100} ${2*Math.PI*18}`} strokeLinecap="round"/>
+            <circle cx="22" cy="22" r="18" fill="none" stroke={col} strokeWidth="3"
+              strokeDasharray={`${2*Math.PI*18*r.conf/100} ${2*Math.PI*18}`} strokeLinecap="round"/>
           </svg>
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:col,fontFamily:C.mono}}>{r.conf}%</div>
         </div>
       </div>
       <div style={{fontSize:12,color:up?C.green:C.red,fontWeight:700,marginBottom:8}}>{up?"▲":"▼"} {Math.abs(r.pct)}% 今日</div>
+      {/* 技術指標 */}
+      {r.tech&&(
+        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+          {r.tech.ma5&&<TechBadge label="MA5" value={r.tech.ma5} color={r.tech.ma5>r.tech.ma20?C.green:C.red}/>}
+          {r.tech.ma20&&<TechBadge label="MA20" value={r.tech.ma20}/>}
+          {r.tech.rsi&&<TechBadge label="RSI" value={r.tech.rsi} color={r.tech.rsi>70?C.red:r.tech.rsi<30?C.green:C.sub}/>}
+          {r.tech.trend&&<TechBadge label="趨勢" value={r.tech.trend} color={r.tech.trend.includes("多")?C.green:r.tech.trend.includes("空")?C.red:C.sub}/>}
+        </div>
+      )}
       <div style={{background:bg,borderRadius:10,padding:"8px 10px"}}>
         <div style={{fontSize:11,color:C.sub,marginBottom:2}}>AI 理由</div>
         <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{r.reason}</div>
@@ -163,7 +212,7 @@ function RecCard({r,type}){
   );
 }
 
-// ── Add Sheet ────────────────────────────────────────────────────────────────
+// ── Add Sheet ─────────────────────────────────────────────────────────────────
 function AddSheet({existing,onAdd,onClose}){
   const[val,setVal]=useState("");
   const[status,setStatus]=useState("");
@@ -207,33 +256,78 @@ function AddSheet({existing,onAdd,onClose}){
   );
 }
 
-// ── Analysis Modal ───────────────────────────────────────────────────────────
+// ── Analysis Modal ────────────────────────────────────────────────────────────
 function AnalysisModal({stock,onClose}){
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(true);
+  const[tech,setTech]=useState(null);
+  const[news,setNews]=useState([]);
+  const[phase,setPhase]=useState("載入資料中...");
+
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
       const sym=stock.currency==="TWD"?"NT$":"$";
-      const prompt=`你是頂尖股票分析師，針對「${stock.name}（${stock.ticker}）」給簡明分析（繁體中文，150字內）。
-現價：${sym}${stock.price}　今日：${stock.pct>0?"+":""}${stock.pct}%　區間：${sym}${stock.low}–${sym}${stock.high}
-請包含：① 今日走勢 ② 主要風險 ③ 操作建議。語氣專業簡潔。`;
+
+      // 同時抓技術指標 + 新聞
+      setPhase("抓取技術指標與新聞...");
+      const [techData, newsData] = await Promise.all([
+        fetchTechnicals(stock.ticker),
+        fetchNews(stock.name, stock.ticker),
+      ]);
+      if(cancelled) return;
+      if(techData) setTech(techData);
+      if(newsData) setNews(newsData);
+
+      setPhase("AI 分析中...");
+
+      // 組建完整 prompt
+      const techSection = techData ? `
+技術指標：
+- MA5：${techData.ma5??"N/A"}　MA20：${techData.ma20??"N/A"}
+- RSI(14)：${techData.rsi??"N/A"}
+- 成交量比（今日/5日均）：${techData.volRatio??"N/A"}x
+- 52週高：${techData.week52High??"N/A"}　52週低：${techData.week52Low??"N/A"}
+- 短線趨勢：${techData.trend??"N/A"}` : "";
+
+      const newsSection = newsData?.length > 0 ? `
+最新相關新聞：
+${newsData.slice(0,3).map(n=>`- ${n.title}（${n.source}）`).join("\n")}` : "";
+
+      const prompt = `你是頂尖股票分析師，請針對「${stock.name}（${stock.ticker}）」給出詳細分析（繁體中文，200字內）。
+
+基本資料：
+現價：${sym}${stock.price}　今日：${stock.pct>0?"+":""}${stock.pct}%
+日內區間：${sym}${stock.low} – ${sym}${stock.high}
+${techSection}
+${newsSection}
+
+請依以下格式輸出：
+【技術面】（50字）說明MA、RSI、趨勢
+【基本面】（50字）結合新聞說明近期利多利空
+【操作建議】（50字）短線具體建議，含支撐/壓力價位`;
+
       try{
-        const result = await streamAnalysis(prompt);
+        const result = await callAI(prompt);
         if(!cancelled) setText(result);
-      }catch{if(!cancelled)setText("⚠️ 分析暫時無法使用");}
-      if(!cancelled)setLoading(false);
+      }catch{
+        if(!cancelled) setText("⚠️ 分析暫時無法使用");
+      }
+      if(!cancelled) setLoading(false);
     })();
     return()=>{cancelled=true;};
   },[]);
 
   const up=stock.pct>=0,col=up?C.green:C.red,sym=stock.currency==="TWD"?"NT$":"$";
+
   return(
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(8,11,18,0.85)",backdropFilter:"blur(4px)"}}/>
-      <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none"}}>
+      <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"85vh",overflowY:"auto"}}>
         <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+
+        {/* 股票標題 */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:20,fontWeight:900,color:C.text}}>{stock.name}</div>
             <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{stock.ticker}</div>
@@ -243,24 +337,54 @@ function AnalysisModal({stock,onClose}){
             <div style={{fontSize:13,color:col,fontWeight:700}}>{up?"▲":"▼"} {Math.abs(stock.pct)}%</div>
           </div>
         </div>
+
+        {/* 技術指標 badges */}
+        {tech&&(
+          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+            {tech.ma5&&<TechBadge label="MA5" value={tech.ma5} color={tech.ma5>tech.ma20?C.green:C.red}/>}
+            {tech.ma20&&<TechBadge label="MA20" value={tech.ma20}/>}
+            {tech.rsi&&<TechBadge label="RSI14" value={tech.rsi} color={tech.rsi>70?C.red:tech.rsi<30?C.green:C.sub}/>}
+            {tech.volRatio&&<TechBadge label="量比" value={`${tech.volRatio}x`} color={tech.volRatio>1.5?C.green:C.sub}/>}
+            {tech.trend&&<TechBadge label="趨勢" value={tech.trend} color={tech.trend.includes("多")?C.green:tech.trend.includes("空")?C.red:C.sub}/>}
+          </div>
+        )}
+
+        {/* 新聞 */}
+        {news.length>0&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:C.sub,marginBottom:6}}>📰 最新新聞</div>
+            {news.slice(0,2).map((n,i)=>(
+              <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+                <div style={{fontSize:12,color:C.text,lineHeight:1.5}}>{n.title}</div>
+                <div style={{fontSize:10,color:C.sub,marginTop:3}}>{n.source}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* AI 分析 */}
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:100}}>
           <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 分析報告</div>
           {loading&&!text&&(
-            <div style={{display:"flex",gap:4,padding:"8px 0"}}>
-              {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+            <div>
+              <div style={{display:"flex",gap:4,padding:"4px 0",marginBottom:6}}>
+                {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+              </div>
+              <div style={{fontSize:12,color:C.sub}}>{phase}</div>
             </div>
           )}
           <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>
             {text}{loading&&text&&<span style={{color:C.green}}>▋</span>}
           </div>
         </div>
+
         <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
       </div>
     </div>
   );
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App(){
   const[tab,setTab]=useState("watch");
   const[tickers,setTickers]=useState(()=>loadWatchlist());
@@ -269,14 +393,17 @@ export default function App(){
   const[modal,setModal]=useState(null);
   const[addOpen,setAddOpen]=useState(false);
   const[editing,setEditing]=useState(false);
-  const[recs,setRecs]=useState(null);
-  const[recsLoad,setRecsLoad]=useState(false);
   const[lastFetch,setLastFetch]=useState(null);
   const[autoRefresh,setAutoRefresh]=useState(false);
+  // AI 推薦
+  const[recs,setRecs]=useState(null);
+  const[recsLoad,setRecsLoad]=useState(false);
+  const[recsPhase,setRecsPhase]=useState("");
   const[marketRecs,setMarketRecs]=useState(null);
   const[marketLoad,setMarketLoad]=useState(false);
-  const[marketStocks,setMarketStocks]=useState({});
+  const[marketPhase,setMarketPhase]=useState("");
 
+  // ── 自選股資料刷新 ──────────────────────────────────────────────────────────
   const refresh=useCallback(async(list)=>{
     if(!list.length) return;
     setFetching(true);
@@ -289,80 +416,120 @@ export default function App(){
   },[]);
 
   useEffect(()=>{ refresh(tickers); },[tickers]);
-
   useEffect(()=>{
     if(!autoRefresh) return;
     const id=setInterval(()=>refresh(tickers),10000);
     return()=>clearInterval(id);
   },[autoRefresh,tickers]);
 
+  // ── 自選股管理 ──────────────────────────────────────────────────────────────
   const addStock=useCallback((ticker,data)=>{
     setTickers(prev=>{const next=[...prev,ticker];saveWatchlist(next);return next;});
     setStocks(prev=>({...prev,[ticker]:data}));
   },[]);
-
   const removeStock=useCallback((ticker)=>{
     setTickers(prev=>{const next=prev.filter(t=>t!==ticker);saveWatchlist(next);return next;});
     setStocks(prev=>{const n={...prev};delete n[ticker];return n;});
   },[]);
 
+  // ── 自選股 AI 分析 ──────────────────────────────────────────────────────────
   const generateRecs=async()=>{
     setRecsLoad(true);
     const list=tickers.map(t=>stocks[t]).filter(Boolean);
     if(!list.length){setRecsLoad(false);return;}
-    const prompt=`你是專業股票分析師。根據以下自選股今日表現，給出買入與減碼建議（繁體中文）。
-只回傳 JSON，格式：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"20字內"}],"sell":[...]}
+
+    // 同時抓所有技術指標 + 新聞
+    setRecsPhase("抓取技術指標與新聞...");
+    const [techResults, newsResults] = await Promise.all([
+      Promise.all(list.map(s=>fetchTechnicals(s.ticker))),
+      Promise.all(list.map(s=>fetchNews(s.name, s.ticker))),
+    ]);
+
+    setRecsPhase("AI 分析中...");
+    const stockDetails = list.map((s,i)=>{
+      const t = techResults[i];
+      const n = newsResults[i];
+      const sym = s.currency==="TWD"?"NT$":"$";
+      return `${s.ticker} ${s.name} | 現價${sym}${s.price} 今日${s.pct>0?"+":""}${s.pct}%` +
+        (t ? ` | MA5:${t.ma5} MA20:${t.ma20} RSI:${t.rsi} 趨勢:${t.trend}` : "") +
+        (n?.length ? ` | 新聞:${n[0]?.title?.slice(0,20)}` : "");
+    }).join("\n");
+
+    const prompt=`你是專業股票分析師。根據以下自選股今日表現、技術指標與新聞，給出買入與減碼建議（繁體中文）。
+只回傳 JSON，格式：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"25字內，含技術或新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
 不要有 markdown，純 JSON。
 
 股票資料：
-${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.price}`).join("\n")}`;
+${stockDetails}`;
+
     try{
-      let fullText="";
-      fullText = await streamAnalysis(prompt);
+      const fullText=await callAI(prompt);
       const clean=fullText.replace(/```json|```/g,"").trim();
       const parsed=JSON.parse(clean);
-      const enrich=arr=>arr.map(r=>({...r,pct:stocks[r.ticker]?.pct??r.pct,real:stocks[r.ticker]?.real??false}));
+      const enrich=arr=>arr.map((r,i)=>({
+        ...r,
+        pct:stocks[r.ticker]?.pct??r.pct,
+        tech:techResults[list.findIndex(s=>s.ticker===r.ticker)]||null,
+      }));
       setRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
     }catch{setRecs({buy:[],sell:[],error:true});}
     setRecsLoad(false);
+    setRecsPhase("");
   };
 
-  // const MARKET_TICKERS = ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","NVDA","AAPL","TSLA","MSFT","GOOGL"];
-
-  const ALL_MARKET_TICKERS = [
-    "2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","2303.TW","2882.TW","2881.TW",
-    "2886.TW","2891.TW","2357.TW","2382.TW","6285.TW","2301.TW","2327.TW","2376.TW",
-    "3008.TW","2344.TW","6669.TW","2603.TW","2609.TW","2002.TW","1301.TW","2412.TW",
-    "3045.TW","2884.TW","2892.TW","5880.TW","2885.TW","2395.TW","2049.TW","2337.TW",
-  ];
-
+  // ── 市場熱門 AI 分析 ────────────────────────────────────────────────────────
   const generateMarketRecs=async()=>{
     setMarketLoad(true);
-    // 先抓市場股價
-    // 排除已在自選股的標的，取前10檔
-    const filtered=ALL_MARKET_TICKERS.filter(t=>!tickers.includes(t)).slice(0,10);
-    const results=await Promise.all(filtered.map(fetchQuote));
-    const map={};
-    results.forEach((d,i)=>{if(d)map[filtered[i]]=d;});
-    setMarketStocks(map);
-    const list=Object.values(map);
-    if(!list.length){setMarketLoad(false);return;}
-    const prompt=`你是專業股票分析師。根據以下市場熱門股今日表現，給出買入與減碼建議（繁體中文）。
-  只回傳 JSON，格式：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"20字內"}],"sell":[...]}
-  不要有 markdown，純 JSON。
-  
-  股票資料：
-  ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.price}`).join("\n")}`;
+
+    // 動態從證交所抓熱門股，排除自選股
+    setMarketPhase("抓取市場熱門標的...");
+    const marketTickers = await fetchMarketTickers(tickers);
+    const top10 = marketTickers.slice(0,10);
+
+    setMarketPhase("抓取股價資料...");
+    const quoteResults = await Promise.all(top10.map(fetchQuote));
+    const validStocks = quoteResults.filter(Boolean);
+
+    if(!validStocks.length){setMarketLoad(false);return;}
+
+    setMarketPhase("抓取技術指標與新聞...");
+    const [techResults, newsResults] = await Promise.all([
+      Promise.all(validStocks.map(s=>fetchTechnicals(s.ticker))),
+      Promise.all(validStocks.map(s=>fetchNews(s.name, s.ticker))),
+    ]);
+
+    setMarketPhase("AI 分析中...");
+    const stockDetails = validStocks.map((s,i)=>{
+      const t = techResults[i];
+      const n = newsResults[i];
+      const sym = s.currency==="TWD"?"NT$":"$";
+      return `${s.ticker} ${s.name} | 現價${sym}${s.price} 今日${s.pct>0?"+":""}${s.pct}%` +
+        (t ? ` | MA5:${t.ma5} MA20:${t.ma20} RSI:${t.rsi} 趨勢:${t.trend} 量比:${t.volRatio}x` : "") +
+        (n?.length ? ` | 新聞:${n[0]?.title?.slice(0,25)}` : "");
+    }).join("\n");
+
+    const prompt=`你是專業股票分析師。根據以下市場熱門台股今日表現、技術指標與新聞，給出買入與減碼建議（繁體中文）。
+以台股為主要分析對象，結合技術面（MA、RSI、量能）與基本面（新聞利多利空）綜合判斷。
+只回傳 JSON，格式：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"25字內，含技術或新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
+不要有 markdown，純 JSON。
+
+股票資料：
+${stockDetails}`;
+
     try{
-      const fullText=await streamAnalysis(prompt);
+      const fullText=await callAI(prompt);
       const clean=fullText.replace(/```json|```/g,"").trim();
       const parsed=JSON.parse(clean);
-      const enrich=arr=>arr.map(r=>({...r,pct:map[r.ticker]?.pct??r.pct}));
+      const techMap={};
+      validStocks.forEach((s,i)=>{techMap[s.ticker]=techResults[i];});
+      const enrich=arr=>arr.map(r=>({...r,tech:techMap[r.ticker]||null}));
       setMarketRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
     }catch{setMarketRecs({buy:[],sell:[],error:true});}
     setMarketLoad(false);
+    setMarketPhase("");
   };
 
+  // ── Derived ───────────────────────────────────────────────────────────────
   const watchData=tickers.map(t=>stocks[t]).filter(Boolean);
   const upCount=watchData.filter(s=>s.pct>=0).length;
   const downCount=watchData.filter(s=>s.pct<0).length;
@@ -407,19 +574,21 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
       {/* Content */}
       <div style={{padding:"0 16px 100px"}}>
 
-        {/* AI 推薦 */}
+        {/* ── AI 推薦 ── */}
         {tab==="ai"&&(
           <>
-            {/* ── 市場熱門 ── */}
+            {/* 市場熱門 */}
             <div style={{marginBottom:24}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:3,height:18,borderRadius:99,background:C.gold}}/>
                 <span style={{fontSize:14,fontWeight:800,color:C.gold}}>市場熱門</span>
-                <div style={{flex:1,height:1,background:"rgba(255,181,71,0.25)"}}/>
-                <span style={{fontSize:10,color:C.sub}}>台積電 聯發科 NVDA 等10檔</span>
+                <div style={{flex:1,height:1,background:C.goldBd}}/>
+                <span style={{fontSize:10,color:C.sub}}>動態抓取 · 排除自選股</span>
               </div>
-              <button onClick={generateMarketRecs} disabled={marketLoad} style={{width:"100%",padding:"12px 0",borderRadius:14,border:`1px solid rgba(255,181,71,0.3)`,background:marketLoad?C.dim:C.goldBg,color:marketLoad?C.sub:C.gold,fontWeight:800,fontSize:14,cursor:marketLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                {marketLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:marketRecs?"↻ 重新分析市場":"✦ 分析市場熱門股"}
+              <button onClick={generateMarketRecs} disabled={marketLoad} style={{width:"100%",padding:"12px 0",borderRadius:14,border:`1px solid ${C.goldBd}`,background:marketLoad?C.dim:C.goldBg,color:marketLoad?C.sub:C.gold,fontWeight:800,fontSize:14,cursor:marketLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                {marketLoad
+                  ? <><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> {marketPhase||"分析中..."}</>
+                  : marketRecs?"↻ 重新分析市場":"✦ 分析市場熱門股（含技術面+新聞）"}
               </button>
               {marketRecs&&!marketLoad&&(
                 <>
@@ -449,11 +618,10 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
                 </>
               )}
             </div>
-        
-            {/* 分隔線 */}
+
             <div style={{height:1,background:C.border,marginBottom:24}}/>
-        
-            {/* ── 我的自選股 ── */}
+
+            {/* 我的自選股 */}
             <div>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:3,height:18,borderRadius:99,background:C.green}}/>
@@ -462,11 +630,13 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
                 <span style={{fontSize:10,color:C.sub}}>{watchData.length} 檔</span>
               </div>
               <button onClick={generateRecs} disabled={recsLoad||watchData.length===0} style={{width:"100%",padding:"12px 0",borderRadius:14,border:"none",background:recsLoad?C.dim:C.green,color:recsLoad?C.sub:C.bg,fontWeight:800,fontSize:14,cursor:recsLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                {recsLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:recs?"↻ 重新分析自選股":"✦ 分析我的自選股"}
+                {recsLoad
+                  ? <><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> {recsPhase||"分析中..."}</>
+                  : recs?"↻ 重新分析自選股":"✦ 分析我的自選股（含技術面+新聞）"}
               </button>
               {!recs&&!recsLoad&&(
                 <div style={{background:C.card,border:`1px dashed ${C.border}`,borderRadius:16,padding:24,textAlign:"center"}}>
-                  <div style={{fontSize:13,color:C.sub,lineHeight:1.8}}>點擊上方按鈕<br/>AI 將根據你的自選股給出建議</div>
+                  <div style={{fontSize:13,color:C.sub,lineHeight:1.8}}>點擊上方按鈕<br/>AI 將結合技術指標與新聞<br/>給出買入與減碼建議</div>
                 </div>
               )}
               {recs&&!recsLoad&&(
@@ -497,14 +667,14 @@ ${list.map(s=>`${s.ticker} ${s.name} 今日${s.pct>0?"+":""}${s.pct}% 現價${s.
                 </>
               )}
             </div>
-        
+
             <div style={{background:C.goldBg,border:`1px solid rgba(255,181,71,0.2)`,borderRadius:12,padding:"10px 14px",marginTop:16}}>
               <div style={{fontSize:11,color:C.gold,lineHeight:1.6}}>⚠️ AI 建議僅供參考，投資請自行評估風險</div>
             </div>
           </>
         )}
 
-        {/* 自選股 */}
+        {/* ── 自選股 ── */}
         {tab==="watch"&&(
           <>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
