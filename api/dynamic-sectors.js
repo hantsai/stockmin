@@ -75,13 +75,27 @@ export default async function handler(req, res) {
     const sectorGroups = {};
     SELECTED_SECTORS.forEach(s => { sectorGroups[s.id] = []; });
 
+    let matched = 0;
+    let unmatched = 0;
+    const sampleUnmatched = [];
+    
     Object.entries(stockMap).forEach(([code, stock]) => {
       const industryCode = industryMap[code];
-      if (!industryCode) return;
+      if (!industryCode) { unmatched++; return; }
       const match = SELECTED_SECTORS.find(s => s.code === industryCode);
-      if (!match) return;
+      if (!match) {
+        unmatched++;
+        if(sampleUnmatched.length < 5) sampleUnmatched.push({code, industryCode, name: stock.name});
+        return;
+      }
+      matched++;
       sectorGroups[match.id].push(stock);
     });
+    
+    console.log(`matched: ${matched}, unmatched: ${unmatched}`);
+    console.log(`sampleUnmatched: ${JSON.stringify(sampleUnmatched)}`);
+    console.log(`industryMap sample: ${JSON.stringify(Object.entries(industryMap).slice(0,5))}`);
+    console.log(`stockMap sample keys: ${JSON.stringify(Object.keys(stockMap).slice(0,5))}`);
 
     // 每個類股排序取前3（漲幅最高）
     const result = SELECTED_SECTORS.map(sector => ({
