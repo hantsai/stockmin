@@ -47,7 +47,7 @@ const SECTORS = [
   {id:"semiconductor",name:"半導體",icon:"⚡",tickers:["2330.TW","2454.TW","2303.TW","2408.TW","6415.TW","3443.TW","3035.TW","5347.TW","6770.TW","2344.TW","2337.TW","2449.TW","3034.TW","2379.TW","3711.TW"]},
   {id:"ai_server",name:"AI/伺服器",icon:"🤖",tickers:["2382.TW","6669.TW","2356.TW","2324.TW","3231.TW","2317.TW","4938.TW","2376.TW","2357.TW","2377.TW","3051.TW","6285.TW","2352.TW","2347.TW","2395.TW"]},
   {id:"components",name:"電子零組件",icon:"🔩",tickers:["3711.TW","2327.TW","6285.TW","2494.TW","3653.TW","2048.TW","4958.TW","2308.TW","2301.TW","2385.TW","2360.TW","3008.TW","2474.TW","2492.TW","2049.TW"]},
-  {id:"finance",name:"金融",icon:"🏦",tickers:["2881.TW","2882.TW","2891.TW","2884.TW","2886.TW","2892.TW","5880.TW","2885.TW","2883.TW","2890.TW","2880.TW","2887.TW","2838.TW","5876.TW"]},
+  {id:"finance",name:"金融",icon:"🏦",tickers:["2881.TW","2882.TW","2891.TW","2884.TW","2886.TW","2892.TW","5880.TW","2885.TW","2883.TW","2890.TW","2880.TW","2887.TW","2838.TW","5876.TW","2888.TW"]},
   {id:"shipping",name:"航運",icon:"🚢",tickers:["2603.TW","2609.TW","2615.TW","2612.TW","2636.TW","2637.TW","2645.TW"]},
   {id:"traditional",name:"鋼鐵/傳產",icon:"🏭",tickers:["2002.TW","1301.TW","1303.TW","1326.TW","6505.TW","2006.TW","2014.TW","2015.TW","1101.TW","1102.TW","1605.TW","1402.TW","1504.TW"]},
   {id:"biotech",name:"生技醫療",icon:"💊",tickers:["6446.TW","3653.TW","4130.TW","4736.TW","1795.TW","3044.TW"]},
@@ -257,6 +257,11 @@ function SectorCard({sector,stocks,analysis,loading,onAnalyze}){
         </div>
         <button onClick={()=>setExpanded(e=>!e)} style={{background:"transparent",border:"none",color:C.sub,fontSize:16,cursor:"pointer"}}>{expanded?"▲":"▼"}</button>
       </div>
+      {stocks.length===0&&(
+        <div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0",marginBottom:12}}>
+          ⚠️ 資料載入失敗，請點「↻ 更新」重試
+        </div>
+      )}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
         {stocks.slice(0,3).map((s,i)=>{
           const up=s.pct>=0,col=up?C.green:C.red,sym=s.currency==="TWD"?"NT$":"$";
