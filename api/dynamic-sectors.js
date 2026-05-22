@@ -3,19 +3,19 @@
 
 // 13 個選定類股，對應 TWSE 官方產業別名稱
 const SELECTED_SECTORS = [
-  { id: "semiconductor",  name: "半導體業",       icon: "⚡" },
-  { id: "computer",       name: "電腦及週邊設備業", icon: "🖥️" },
-  { id: "components",     name: "電子零組件業",    icon: "🔩" },
-  { id: "optoelectronics",name: "光電業",          icon: "💡" },
-  { id: "telecom",        name: "通信網路業",      icon: "📡" },
-  { id: "biotech",        name: "生技醫療業",      icon: "💊" },
-  { id: "finance",        name: "金融保險",        icon: "🏦" },
-  { id: "shipping",       name: "航運業",          icon: "🚢" },
-  { id: "steel",          name: "鋼鐵工業",        icon: "🏭" },
-  { id: "digital",        name: "數位雲端",        icon: "☁️" },
-  { id: "green",          name: "綠能環保",        icon: "🌿" },
-  { id: "chemical",       name: "化學工業",        icon: "⚗️" },
-  { id: "machinery",      name: "電機機械",        icon: "⚙️" },
+  { id:"semiconductor",   code:"14", name:"半導體業",       icon:"⚡" },
+  { id:"computer",        code:"15", name:"電腦及週邊設備業", icon:"🖥️" },
+  { id:"components",      code:"16", name:"電子零組件業",    icon:"🔩" },
+  { id:"optoelectronics", code:"21", name:"光電業",          icon:"💡" },
+  { id:"telecom",         code:"22", name:"通信網路業",      icon:"📡" },
+  { id:"biotech",         code:"08B",name:"生技醫療業",      icon:"💊" },
+  { id:"finance",         code:"29", name:"金融保險",        icon:"🏦" },
+  { id:"shipping",        code:"28", name:"航運業",          icon:"🚢" },
+  { id:"steel",           code:"11", name:"鋼鐵工業",        icon:"🏭" },
+  { id:"digital",         code:"37", name:"數位雲端",        icon:"☁️" },
+  { id:"green",           code:"35", name:"綠能環保",        icon:"🌿" },
+  { id:"chemical",        code:"08", name:"化學工業",        icon:"⚗️" },
+  { id:"machinery",       code:"05", name:"電機機械",        icon:"⚙️" },
 ];
 
 export default async function handler(req, res) {
@@ -73,15 +73,14 @@ export default async function handler(req, res) {
     // ── Step 3：依產業分類，取漲幅前3大 ──────────────────────────────────────
     // 先把所有股票按產業分組
     const sectorGroups = {};
-    SELECTED_SECTORS.forEach(s => { sectorGroups[s.name] = []; });
+    SELECTED_SECTORS.forEach(s => { sectorGroups[s.id] = []; });
 
     Object.entries(stockMap).forEach(([code, stock]) => {
-      const industry = industryMap[code];
-      if (!industry) return;
-      // 找對應的選定類股
-      const match = SELECTED_SECTORS.find(s => industry.includes(s.name) || s.name.includes(industry));
+      const industryCode = industryMap[code];
+      if (!industryCode) return;
+      const match = SELECTED_SECTORS.find(s => s.code === industryCode);
       if (!match) return;
-      sectorGroups[match.name].push(stock);
+      sectorGroups[match.id].push(stock);
     });
 
     // 每個類股排序取前3（漲幅最高）
@@ -89,7 +88,7 @@ export default async function handler(req, res) {
       id:     sector.id,
       name:   sector.name,
       icon:   sector.icon,
-      stocks: (sectorGroups[sector.name] || [])
+      stocks: (sectorGroups[sector.id] || [])
         .filter(s => !isNaN(s.pct))
         .sort((a, b) => b.pct - a.pct)
         .slice(0, 3),
