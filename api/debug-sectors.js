@@ -8,7 +8,13 @@ export default async function handler(req, res) {
     );
     const companies = await companyRes.json();
     const sample = companies.slice(0, 3);
-    const industries = [...new Set(companies.map(c => c["產業別"]).filter(Boolean))].slice(0, 20);
+    const industryMap = {};
+    companies.forEach(c => {
+      if(c["公司代號"] && c["產業別"]) {
+        industryMap[c["產業別"]] = industryMap[c["產業別"]] || 0;
+        industryMap[c["產業別"]]++;
+      }
+    });
 
     // 測試價格資料
     const priceRes = await fetch(
@@ -20,10 +26,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       companyCount: companies.length,
-      companySample: sample,
-      industries,
+      allIndustries: industryMap,  // 代碼: 公司數
       priceCount: prices.length,
-      priceSample,
     });
   } catch(e) {
     res.status(500).json({ error: e.message });
