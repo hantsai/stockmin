@@ -643,7 +643,7 @@ export default function App(){
     const mTickers=await fetchMarketTickers(tickers);
 
     setMarketPhase("抓取股價資料...");
-    const quoteR=await Promise.all(mTickers.slice(0,10).map(fetchQuote));
+    const quoteR=await Promise.all(mTickers.slice(0,6).map(fetchQuote));
     const validStocks=quoteR.filter(Boolean);
     if(!validStocks.length){setMarketLoad(false);return;}
 
@@ -657,7 +657,7 @@ export default function App(){
     const chipsR=await Promise.all(validStocks.map(s=>fetchChips(s.ticker)));
 
     setMarketPhase("AI 分析中...");
-    await sleep(800);
+    await sleep(1500);
 
     const details=buildDetails(validStocks,techR,newsR,chipsR);
     const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
