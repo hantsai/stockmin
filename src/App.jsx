@@ -208,6 +208,76 @@ function WatchCard({s,onTap,onRemove,editing}){
   );
 }
 
+function RecDetailModal({r, type, children}){
+  const[open,setOpen]=useState(false);
+  const[text,setText]=useState("");
+  const[loading,setLoading]=useState(false);
+  const isBuy=type==="buy",col=isBuy?C.green:C.red;
+  const up=r.pct>=0;
+
+  const analyze=async()=>{
+    if(text) return; // 已經分析過就不重複
+    setLoading(true);
+    const prompt=`你是頂尖股票分析師，針對「${r.name}（${r.ticker}）」給出詳細分析（繁體中文，200字內）。
+今日漲跌：${r.pct>0?"+":""}${r.pct}%
+${r.tech?`技術指標：MA5:${r.tech.ma5} MA20:${r.tech.ma20} RSI:${r.tech.rsi} 趨勢:${r.tech.trend}`:""}
+AI建議理由：${r.reason}
+
+請依格式輸出：
+【進場時機】何時適合進場
+【目標價位】短線目標與支撐
+【主要風險】需注意的風險
+【操作建議】具體建議`;
+    try{
+      const result=await callAI(prompt);
+      setText(result);
+    }catch{setText("⚠️ 分析暫時無法使用");}
+    setLoading(false);
+  };
+
+  return(
+    <>
+      <div onClick={()=>{setOpen(true);analyze();}}>{children}</div>
+      {open&&(
+        <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+          <div onClick={()=>setOpen(false)} style={{flex:1,background:"rgba(8,11,18,0.85)",backdropFilter:"blur(4px)"}}/>
+          <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"80vh",overflowY:"auto"}}>
+            <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:900,color:C.text}}>{r.name}</div>
+                <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{r.ticker}</div>
+              </div>
+              <div style={{background:isBuy?C.greenBg:C.redBg,border:`1px solid ${isBuy?C.greenBd:C.redBd}`,borderRadius:10,padding:"6px 12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:col}}>{isBuy?"建議買入":"建議減碼"}</div>
+              </div>
+            </div>
+            <div style={{fontSize:13,color:up?C.green:C.red,fontWeight:700,marginBottom:14}}>{up?"▲":"▼"} {Math.abs(r.pct)}% 今日</div>
+            {r.tech&&(
+              <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+                {r.tech.ma5&&<Badge label="MA5" value={r.tech.ma5} color={r.tech.ma5>r.tech.ma20?C.green:C.red}/>}
+                {r.tech.ma20&&<Badge label="MA20" value={r.tech.ma20}/>}
+                {r.tech.rsi&&<Badge label="RSI" value={r.tech.rsi} color={r.tech.rsi>70?C.red:r.tech.rsi<30?C.green:C.sub}/>}
+                {r.tech.trend&&<Badge label="趨勢" value={r.tech.trend} color={r.tech.trend.includes("多")?C.green:r.tech.trend.includes("空")?C.red:C.sub}/>}
+              </div>
+            )}
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:100}}>
+              <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 詳細分析</div>
+              {loading&&(
+                <div style={{display:"flex",gap:4,padding:"8px 0"}}>
+                  {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+                </div>
+              )}
+              <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{text}</div>
+            </div>
+            <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function RecCard({r,type}){
   const isBuy=type==="buy",col=isBuy?C.green:C.red,bg=isBuy?C.greenBg:C.redBg,bd=isBuy?C.greenBd:C.redBd;
   const up=r.pct>=0;
@@ -235,10 +305,15 @@ function RecCard({r,type}){
           {r.tech.trend&&<Badge label="趨勢" value={r.tech.trend} color={r.tech.trend.includes("多")?C.green:r.tech.trend.includes("空")?C.red:C.sub}/>}
         </div>
       )}
-      <div style={{background:bg,borderRadius:10,padding:"8px 10px"}}>
-        <div style={{fontSize:11,color:C.sub,marginBottom:2}}>AI 理由</div>
-        <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{r.reason}</div>
-      </div>
+      <RecDetailModal r={r} type={type}>
+        <div style={{background:bg,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+            <div style={{fontSize:11,color:C.sub}}>AI 理由</div>
+            <div style={{fontSize:10,color:col}}>點擊看詳細分析 ›</div>
+          </div>
+          <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{r.reason}</div>
+        </div>
+      </RecDetailModal>
     </div>
   );
 }
