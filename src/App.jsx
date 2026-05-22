@@ -43,17 +43,6 @@ const TW_NAMES = {
   "2612.TW":"中航","2636.TW":"台驊","2637.TW":"慧洋-KY",
 };
 
-const SECTORS = [
-  {id:"semiconductor",name:"半導體",icon:"⚡",tickers:["2330.TW","2454.TW","2303.TW","2408.TW","6415.TW","3443.TW","3035.TW","5347.TW","6770.TW","2344.TW","2337.TW","2449.TW","3034.TW","2379.TW","3711.TW"]},
-  {id:"ai_server",name:"AI/伺服器",icon:"🤖",tickers:["2382.TW","6669.TW","2356.TW","2324.TW","3231.TW","2317.TW","4938.TW","2376.TW","2357.TW","2377.TW","3051.TW","6285.TW","2352.TW","2347.TW","2395.TW"]},
-  {id:"components",name:"電子零組件",icon:"🔩",tickers:["3711.TW","2327.TW","6285.TW","2494.TW","3653.TW","2048.TW","4958.TW","2308.TW","2301.TW","2385.TW","2360.TW","3008.TW","2474.TW","2492.TW","2049.TW"]},
-  {id:"finance",name:"金融",icon:"🏦",tickers:["2881.TW","2882.TW","2891.TW","2884.TW","2886.TW","2892.TW","5880.TW","2885.TW","2883.TW","2890.TW","2880.TW","2887.TW","2838.TW","5876.TW","2888.TW"]},
-  {id:"shipping",name:"航運",icon:"🚢",tickers:["2603.TW","2609.TW","2615.TW","2612.TW","2636.TW","2637.TW","2645.TW"]},
-  {id:"traditional",name:"鋼鐵/傳產",icon:"🏭",tickers:["2002.TW","1301.TW","1303.TW","1326.TW","6505.TW","2006.TW","2014.TW","2015.TW","1101.TW","1102.TW","1605.TW","1402.TW","1504.TW"]},
-  {id:"biotech",name:"生技醫療",icon:"💊",tickers:["6446.TW","3653.TW","4130.TW","4736.TW","1795.TW","3044.TW"]},
-  {id:"telecom",name:"電信",icon:"📡",tickers:["2412.TW","3045.TW","4904.TW"]},
-];
-
 const UNDERVALUED_POOL = [
   "2881.TW","2882.TW","2886.TW","2891.TW","2892.TW","5880.TW",
   "2603.TW","2609.TW","2615.TW","1301.TW","1303.TW","6505.TW",
@@ -101,6 +90,15 @@ async function fetchSectorBatch(tickers) {
   } catch { return {}; }
 }
 
+// 新：動態類股 API
+async function fetchDynamicSectors() {
+  try {
+    const res = await fetch(`/api/dynamic-sectors`,{signal:AbortSignal.timeout(20000)});
+    if(!res.ok) throw new Error();
+    return await res.json();
+  } catch { return null; }
+}
+
 async function fetchTechnicals(ticker) {
   try {
     const res = await fetch(`/api/technicals?ticker=${encodeURIComponent(ticker)}`,{signal:AbortSignal.timeout(10000)});
@@ -132,7 +130,7 @@ async function fetchMarketTickers(exclude=[]) {
     if(!res.ok) throw new Error();
     return (await res.json()).tickers || [];
   } catch {
-    return ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","2303.TW","2882.TW","2357.TW","2382.TW","2412.TW"].filter(t=>!exclude.includes(t)).slice(0,10);
+    return ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","2303.TW","2882.TW","2357.TW","2382.TW","2412.TW"].filter(t=>!exclude.includes(t)).slice(0,5);
   }
 }
 
@@ -245,37 +243,44 @@ function RecCard({r,type}){
   );
 }
 
-function SectorCard({sector,stocks,analysis,loading,onAnalyze}){
+// ── SectorCard（動態版）────────────────────────────────────────────────────────
+function SectorCard({sector,analysis,loading,onAnalyze}){
   const[expanded,setExpanded]=useState(false);
+  const stocks = sector.stocks || [];
   return(
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:18,padding:"14px 16px",marginBottom:12}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:20}}>{sector.icon}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.text}}>{sector.name}</span>
-          <span style={{fontSize:10,color:C.sub}}>前3大漲幅</span>
+          <span style={{fontSize:10,color:C.sub}}>
+            {sector.total ? `${sector.total}支成分股` : "前3大漲幅"}
+          </span>
         </div>
         <button onClick={()=>setExpanded(e=>!e)} style={{background:"transparent",border:"none",color:C.sub,fontSize:16,cursor:"pointer"}}>{expanded?"▲":"▼"}</button>
       </div>
-      {stocks.length===0&&(
+
+      {stocks.length===0?(
         <div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0",marginBottom:12}}>
-          ⚠️ 資料載入失敗，請點「↻ 更新」重試
+          ⚠️ 今日無資料或非交易日
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+          {stocks.map((s,i)=>{
+            const up=s.pct>=0,col=up?C.green:C.red;
+            return(
+              <div key={s.ticker} style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:i===0?C.gold:C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:i===0?C.bg:C.sub,flexShrink:0}}>{i+1}</div>
+                <div style={{flex:1,fontSize:13,fontWeight:700,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                <div style={{fontSize:11,fontFamily:C.mono,color:C.sub,flexShrink:0}}>NT${s.price}</div>
+                <div style={{fontSize:12,fontWeight:800,color:col,fontFamily:C.mono,minWidth:56,textAlign:"right",flexShrink:0}}>{up?"▲":"▼"}{Math.abs(s.pct)}%</div>
+              </div>
+            );
+          })}
         </div>
       )}
-      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
-        {stocks.slice(0,3).map((s,i)=>{
-          const up=s.pct>=0,col=up?C.green:C.red,sym=s.currency==="TWD"?"NT$":"$";
-          return(
-            <div key={s.ticker} style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:18,height:18,borderRadius:"50%",background:i===0?C.gold:C.dim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:i===0?C.bg:C.sub,flexShrink:0}}>{i+1}</div>
-              <div style={{flex:1,fontSize:13,fontWeight:700,color:C.text}}>{TW_NAMES[s.ticker]||s.ticker}</div>
-              <div style={{fontSize:11,fontFamily:C.mono,color:C.sub}}>{sym}{s.price}</div>
-              <div style={{fontSize:12,fontWeight:800,color:col,fontFamily:C.mono,minWidth:52,textAlign:"right"}}>{up?"▲":"▼"}{Math.abs(s.pct)}%</div>
-            </div>
-          );
-        })}
-      </div>
-      <button onClick={onAnalyze} disabled={loading} style={{width:"100%",padding:"8px 0",borderRadius:10,border:`1px solid ${C.blueBd}`,background:loading?C.dim:C.blueBg,color:loading?C.sub:C.blue,fontWeight:700,fontSize:12,cursor:loading?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+
+      <button onClick={onAnalyze} disabled={loading||stocks.length===0} style={{width:"100%",padding:"8px 0",borderRadius:10,border:`1px solid ${C.blueBd}`,background:loading?C.dim:C.blueBg,color:loading?C.sub:C.blue,fontWeight:700,fontSize:12,cursor:(loading||stocks.length===0)?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
         {loading?<><div style={{width:12,height:12,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:analysis?"↻ 重新分析":"✦ AI 分析此類股（含籌碼）"}
       </button>
       {analysis&&!expanded&&<div onClick={()=>setExpanded(true)} style={{marginTop:8,fontSize:11,color:C.blue,cursor:"pointer",textAlign:"center"}}>查看 AI 分析 ▼</div>}
@@ -325,7 +330,6 @@ function AddSheet({existing,onAdd,onClose}){
   );
 }
 
-// ── Analysis Modal ────────────────────────────────────────────────────────────
 function AnalysisModal({stock,onClose}){
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(true);
@@ -333,73 +337,29 @@ function AnalysisModal({stock,onClose}){
   const[news,setNews]=useState([]);
   const[chips,setChips]=useState(null);
   const[phase,setPhase]=useState("載入資料中...");
-
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
       const sym=stock.currency==="TWD"?"NT$":"$";
-
-      // 循序抓取，避免同時發太多請求
       setPhase("抓取技術指標...");
-      const techData = await fetchTechnicals(stock.ticker);
+      const techData=await fetchTechnicals(stock.ticker);
       if(cancelled) return;
-
       setPhase("抓取新聞...");
-      const newsData = await fetchNews(stock.name, stock.ticker);
+      const newsData=await fetchNews(stock.name,stock.ticker);
       if(cancelled) return;
-
       setPhase("抓取籌碼資料...");
-      const chipsData = await fetchChips(stock.ticker);
+      const chipsData=await fetchChips(stock.ticker);
       if(cancelled) return;
-
       if(techData) setTech(techData);
       if(newsData) setNews(newsData);
       if(chipsData) setChips(chipsData);
-
       setPhase("AI 深度分析中...");
-      await sleep(500); // 稍等，避免速率限制
-
-      const techSection=techData?`
-【技術指標】
-- MA5：${techData.ma5??"-"}　MA20：${techData.ma20??"-"}
-- RSI(14)：${techData.rsi??"-"}　量比：${techData.volRatio??"-"}x
-- 52週高：${techData.week52High??"-"}　52週低：${techData.week52Low??"-"}
-- 短線趨勢：${techData.trend??"-"}`:"";
-
-      const chipsSection=chipsData?.chips?`
-【籌碼面（前一交易日）】
-- 外資：${chipsData.chips.foreign!=null?(chipsData.chips.foreign>0?"+":"")+chipsData.chips.foreign.toLocaleString()+"張":"-"}
-- 投信：${chipsData.chips.trust!=null?(chipsData.chips.trust>0?"+":"")+chipsData.chips.trust.toLocaleString()+"張":"-"}
-- 自營商：${chipsData.chips.dealer!=null?(chipsData.chips.dealer>0?"+":"")+chipsData.chips.dealer.toLocaleString()+"張":"-"}
-- 三大合計：${chipsData.chips.totalNet!=null?(chipsData.chips.totalNet>0?"+":"")+chipsData.chips.totalNet.toLocaleString()+"張":"-"}`:"";
-
-      const valuationSection=chipsData?.valuation?`
-【基本面估值】
-- 本益比(PE)：${chipsData.valuation.per??"-"}
-- 淨值比(PB)：${chipsData.valuation.pbr??"-"}
-- 殖利率：${chipsData.valuation.dividendYield??"-"}%`:"";
-
-      const newsSection=newsData?.length?`
-【最新新聞】
-${newsData.slice(0,3).map(n=>`- ${n.title}`).join("\n")}`:"";
-
-      const prompt=`你是頂尖股票分析師，請針對「${stock.name}（${stock.ticker}）」做詳細分析（繁體中文，300字內）。
-
-【基本資料】
-現價：${sym}${stock.price}　今日：${stock.pct>0?"+":""}${stock.pct}%
-日內區間：${sym}${stock.low} – ${sym}${stock.high}
-${techSection}
-${chipsSection}
-${valuationSection}
-${newsSection}
-
-請依以下格式輸出，每項50-80字：
-【技術面分析】說明MA均線多空排列、RSI超買超賣、趨勢與量能
-【籌碼面分析】說明三大法人動向、主力動態、籌碼集中度
-【基本面分析】結合新聞與估值說明近期利多利空
-【風險提示】說明主要下行風險
-【操作建議】具體短線策略，含支撐壓力價位`;
-
+      await sleep(500);
+      const techSection=techData?`\n【技術指標】\n- MA5：${techData.ma5??"-"} MA20：${techData.ma20??"-"}\n- RSI(14)：${techData.rsi??"-"} 量比：${techData.volRatio??"-"}x\n- 趨勢：${techData.trend??"-"}`:"";
+      const chipsSection=chipsData?.chips?`\n【籌碼面】\n- 外資：${chipsData.chips.foreign!=null?(chipsData.chips.foreign>0?"+":"")+chipsData.chips.foreign.toLocaleString()+"張":"-"}\n- 投信：${chipsData.chips.trust!=null?(chipsData.chips.trust>0?"+":"")+chipsData.chips.trust.toLocaleString()+"張":"-"}\n- 三大合計：${chipsData.chips.totalNet!=null?(chipsData.chips.totalNet>0?"+":"")+chipsData.chips.totalNet.toLocaleString()+"張":"-"}`:"";
+      const valuationSection=chipsData?.valuation?`\n【估值】PE：${chipsData.valuation.per??"-"} PB：${chipsData.valuation.pbr??"-"} 殖利率：${chipsData.valuation.dividendYield??"-"}%`:"";
+      const newsSection=newsData?.length?`\n【最新新聞】\n${newsData.slice(0,3).map(n=>`- ${n.title}`).join("\n")}`:"";
+      const prompt=`你是頂尖股票分析師，針對「${stock.name}（${stock.ticker}）」做詳細分析（繁體中文，300字內）。\n【基本資料】現價：${sym}${stock.price} 今日：${stock.pct>0?"+":""}${stock.pct}% 區間：${sym}${stock.low}–${sym}${stock.high}${techSection}${chipsSection}${valuationSection}${newsSection}\n\n請依格式輸出（每項50-80字）：\n【技術面分析】\n【籌碼面分析】\n【基本面分析】\n【風險提示】\n【操作建議】含支撐壓力價位`;
       try{
         const result=await callAI(prompt);
         if(!cancelled) setText(result);
@@ -408,7 +368,6 @@ ${newsSection}
     })();
     return()=>{cancelled=true;};
   },[]);
-
   const up=stock.pct>=0,col=up?C.green:C.red,sym=stock.currency==="TWD"?"NT$":"$";
   return(
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
@@ -416,10 +375,7 @@ ${newsSection}
       <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div>
-            <div style={{fontSize:20,fontWeight:900,color:C.text}}>{stock.name}</div>
-            <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{stock.ticker}</div>
-          </div>
+          <div><div style={{fontSize:20,fontWeight:900,color:C.text}}>{stock.name}</div><div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{stock.ticker}</div></div>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:22,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{stock.price.toLocaleString()}</div>
             <div style={{fontSize:13,color:col,fontWeight:700}}>{up?"▲":"▼"} {Math.abs(stock.pct)}%</div>
@@ -453,14 +409,7 @@ ${newsSection}
         )}
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:120}}>
           <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 深度分析報告</div>
-          {loading&&!text&&(
-            <div>
-              <div style={{display:"flex",gap:4,marginBottom:8}}>
-                {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
-              </div>
-              <div style={{fontSize:12,color:C.sub}}>{phase}</div>
-            </div>
-          )}
+          {loading&&!text&&(<div><div style={{display:"flex",gap:4,marginBottom:8}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div><div style={{fontSize:12,color:C.sub}}>{phase}</div></div>)}
           <div style={{fontSize:14,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text}</div>
         </div>
         <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
@@ -469,38 +418,26 @@ ${newsSection}
   );
 }
 
-// ── Undervalued Section ───────────────────────────────────────────────────────
 function UndervaluedSection({watchTickers}){
   const[result,setResult]=useState(null);
   const[loading,setLoading]=useState(false);
   const[phase,setPhase]=useState("");
-
   const analyze=async()=>{
     setLoading(true);setResult(null);
     const pool=UNDERVALUED_POOL.filter(t=>!watchTickers.includes(t));
     const sample=pool.sort(()=>Math.random()-0.5).slice(0,15);
-
     setPhase("抓取候選股報價...");
-    const quotes = await fetchSectorBatch(sample);
-
+    const quotes=await fetchSectorBatch(sample);
     setPhase("抓取估值資料...");
-    const valuations = await Promise.all(sample.map(t=>fetchChips(t)));
-
+    const valuations=await Promise.all(sample.map(t=>fetchChips(t)));
     setPhase("AI 篩選低估股...");
     await sleep(500);
-
     const details=sample.map((t,i)=>{
       const q=quotes[t];const v=valuations[i]?.valuation;
       if(!q) return null;
-      return `${t} ${TW_NAMES[t]||t} 今日${q.pct>0?"+":""}${q.pct}% 現價NT$${q.price}`+
-        (v?` PE:${v.per??"-"} PB:${v.pbr??"-"} 殖利率:${v.dividendYield??"-"}%`:"");
+      return `${t} ${TW_NAMES[t]||t} 今日${q.pct>0?"+":""}${q.pct}% 現價NT$${q.price}`+(v?` PE:${v.per??"-"} PB:${v.pbr??"-"} 殖利率:${v.dividendYield??"-"}%`:"");
     }).filter(Boolean).join("\n");
-
-    const prompt=`你是價值投資分析師。根據以下台股資料，找出3支目前可能被市場低估、具長期投資價值的個股（繁體中文）。
-判斷標準：低本益比、低淨值比、高殖利率、近期股價疲弱但基本面穩健。
-只回傳 JSON：{"stocks":[{"ticker":"","name":"","reason":"低估理由30字","potential":"上漲潛力說明20字","risk":"主要風險15字"}]}
-純 JSON，不要 markdown。\n候選股：\n${details}`;
-
+    const prompt=`你是價值投資分析師。根據以下台股資料，找出3支目前可能被市場低估、具長期投資價值的個股（繁體中文）。判斷標準：低本益比、低淨值比、高殖利率、近期股價疲弱但基本面穩健。只回傳 JSON：{"stocks":[{"ticker":"","name":"","reason":"低估理由30字","potential":"上漲潛力說明20字","risk":"主要風險15字"}]}純 JSON。\n候選股：\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
@@ -508,7 +445,6 @@ function UndervaluedSection({watchTickers}){
     }catch{setResult([]);}
     setLoading(false);setPhase("");
   };
-
   return(
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
@@ -523,10 +459,7 @@ function UndervaluedSection({watchTickers}){
       {result&&result.length>0&&result.map((s,i)=>(
         <div key={s.ticker||i} style={{background:C.card,border:`1px solid ${C.purpleBd}`,borderRadius:16,padding:"14px",marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:C.text}}>{s.name}</div>
-              <div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div>
-            </div>
+            <div><div style={{fontSize:15,fontWeight:800,color:C.text}}>{s.name}</div><div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div></div>
             <div style={{background:C.purpleBg,border:`1px solid ${C.purpleBd}`,borderRadius:8,padding:"4px 10px",fontSize:11,color:C.purple,fontWeight:700}}>#{i+1}</div>
           </div>
           <div style={{background:C.purpleBg,borderRadius:10,padding:"8px 10px",marginBottom:6}}>
@@ -534,14 +467,8 @@ function UndervaluedSection({watchTickers}){
             <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{s.reason}</div>
           </div>
           <div style={{display:"flex",gap:6}}>
-            <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"6px 8px"}}>
-              <div style={{fontSize:10,color:C.sub,marginBottom:1}}>上漲潛力</div>
-              <div style={{fontSize:11,color:C.green}}>{s.potential}</div>
-            </div>
-            <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"6px 8px"}}>
-              <div style={{fontSize:10,color:C.sub,marginBottom:1}}>主要風險</div>
-              <div style={{fontSize:11,color:C.red}}>{s.risk}</div>
-            </div>
+            <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"6px 8px"}}><div style={{fontSize:10,color:C.sub,marginBottom:1}}>上漲潛力</div><div style={{fontSize:11,color:C.green}}>{s.potential}</div></div>
+            <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"6px 8px"}}><div style={{fontSize:10,color:C.sub,marginBottom:1}}>主要風險</div><div style={{fontSize:11,color:C.red}}>{s.risk}</div></div>
           </div>
         </div>
       ))}
@@ -569,8 +496,10 @@ export default function App(){
   const[marketRecs,setMarketRecs]=useState(null);
   const[marketLoad,setMarketLoad]=useState(false);
   const[marketPhase,setMarketPhase]=useState("");
-  const[sectorStocks,setSectorStocks]=useState({});
+  // 類股（動態版）
+  const[sectors,setSectors]=useState([]);
   const[sectorLoading,setSectorLoading]=useState(false);
+  const[sectorLastUpdate,setSectorLastUpdate]=useState(null);
   const[sectorAnalysis,setSectorAnalysis]=useState({});
   const[sectorAnalyzing,setSectorAnalyzing]=useState({});
 
@@ -598,39 +527,70 @@ export default function App(){
     setStocks(prev=>{const n={...prev};delete n[ticker];return n;});
   },[]);
 
+  // ── 動態類股載入 ─────────────────────────────────────────────────────────────
+  const loadSectors=async()=>{
+    setSectorLoading(true);
+    try{
+      const data=await fetchDynamicSectors();
+      if(data?.sectors) {
+        setSectors(data.sectors);
+        setSectorLastUpdate(new Date());
+      }
+    }catch(e){console.error("loadSectors",e);}
+    finally{setSectorLoading(false);}
+  };
+  useEffect(()=>{if(tab==="sectors"&&sectors.length===0) loadSectors();},[tab]);
+
+  // ── 類股 AI 分析 ─────────────────────────────────────────────────────────────
+  const analyzeSector=async(sector)=>{
+    const list=sector.stocks||[];
+    if(!list.length) return;
+    setSectorAnalyzing(prev=>({...prev,[sector.id]:true}));
+    const techR=await Promise.all(list.map(s=>fetchTechnicals(s.ticker)));
+    const newsR=await Promise.all(list.map(s=>fetchNews(s.name,s.ticker)));
+    const chipsR=await Promise.all(list.map(s=>fetchChips(s.ticker)));
+    await sleep(800);
+    const details=list.map((s,i)=>{
+      const t=techR[i],n=newsR[i],c=chipsR[i];
+      return `${s.name}(${s.ticker}) 今日${s.pct>0?"+":""}${s.pct}% 現價NT$${s.price}`+
+        (t?` MA5:${t.ma5} RSI:${t.rsi} 趨勢:${t.trend}`:"") +
+        (c?.chips?` 外資:${c.chips.foreign!=null?(c.chips.foreign>0?"+":"")+c.chips.foreign+"張":"-"}`:"")+
+        (n?.length?` 新聞:${n[0]?.title?.slice(0,20)}`:"");
+    }).join("\n");
+    const prompt=`你是股票分析師。請分析台股「${sector.name}」類股今日前3大漲幅標的（繁體中文，200字內）。結合技術面、籌碼面與新聞，說明：①類股整體動能 ②籌碼面動向 ③最值得關注的標的 ④短線操作建議。\n${details}`;
+    try{
+      const text=await callAI(prompt);
+      setSectorAnalysis(prev=>({...prev,[sector.id]:text}));
+    }catch{setSectorAnalysis(prev=>({...prev,[sector.id]:"⚠️ 分析失敗，請重試"}));}
+    setSectorAnalyzing(prev=>({...prev,[sector.id]:false}));
+  };
+
+  // ── AI 推薦 ──────────────────────────────────────────────────────────────────
   const buildDetails=(list,techR,newsR,chipsR)=>
     list.map((s,i)=>{
       const t=techR?.[i],n=newsR?.[i],c=chipsR?.[i];
       const sym=s.currency==="TWD"?"NT$":"$";
       return `${s.ticker} ${s.name} | 現價${sym}${s.price} 今日${s.pct>0?"+":""}${s.pct}%`+
-        (t?` | MA5:${t.ma5} MA20:${t.ma20} RSI:${t.rsi} 趨勢:${t.trend} 量比:${t.volRatio}x`:"")+
-        (c?.chips?` | 外資:${c.chips.foreign!=null?(c.chips.foreign>0?"+":"")+c.chips.foreign+"張":"-"} 投信:${c.chips.trust!=null?(c.chips.trust>0?"+":"")+c.chips.trust+"張":"-"}`:"")+
+        (t?` | MA5:${t.ma5} RSI:${t.rsi} 趨勢:${t.trend} 量比:${t.volRatio}x`:"")+
+        (c?.chips?` | 外資:${c.chips.foreign!=null?(c.chips.foreign>0?"+":"")+c.chips.foreign+"張":"-"}`:"")+
         (c?.valuation?` | PE:${c.valuation.per??"-"} 殖利率:${c.valuation.dividendYield??"-"}%`:"")+
         (n?.length?` | 新聞:${n[0]?.title?.slice(0,20)}`:"");
     }).join("\n");
 
-  // ── 自選股 AI 分析（循序執行）────────────────────────────────────────────────
   const generateRecs=async()=>{
     setRecsLoad(true);
     const list=tickers.map(t=>stocks[t]).filter(Boolean);
     if(!list.length){setRecsLoad(false);return;}
-
     setRecsPhase("抓取技術指標...");
     const techR=await Promise.all(list.map(s=>fetchTechnicals(s.ticker)));
-
     setRecsPhase("抓取新聞...");
     const newsR=await Promise.all(list.map(s=>fetchNews(s.name,s.ticker)));
-
     setRecsPhase("抓取籌碼資料...");
     const chipsR=await Promise.all(list.map(s=>fetchChips(s.ticker)));
-
     setRecsPhase("AI 分析中...");
     await sleep(800);
-
     const details=buildDetails(list,techR,newsR,chipsR);
-    const prompt=`你是專業股票分析師。根據以下自選股資料（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
-只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
-純 JSON。\n\n${details}`;
+    const prompt=`你是專業股票分析師。根據以下自選股資料（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
@@ -641,33 +601,24 @@ export default function App(){
     setRecsLoad(false);setRecsPhase("");
   };
 
-  // ── 市場熱門 AI 分析（循序執行）──────────────────────────────────────────────
   const generateMarketRecs=async()=>{
     setMarketLoad(true);
     setMarketPhase("抓取市場熱門標的...");
     const mTickers=await fetchMarketTickers(tickers);
-
     setMarketPhase("抓取股價資料...");
     const quoteR=await Promise.all(mTickers.slice(0,6).map(fetchQuote));
     const validStocks=quoteR.filter(Boolean);
     if(!validStocks.length){setMarketLoad(false);return;}
-
     setMarketPhase("抓取技術指標...");
     const techR=await Promise.all(validStocks.map(s=>fetchTechnicals(s.ticker)));
-
     setMarketPhase("抓取新聞...");
     const newsR=await Promise.all(validStocks.map(s=>fetchNews(s.name,s.ticker)));
-
     setMarketPhase("抓取籌碼資料...");
     const chipsR=await Promise.all(validStocks.map(s=>fetchChips(s.ticker)));
-
     setMarketPhase("AI 分析中...");
-    await sleep(1500);
-
+    await sleep(1000);
     const details=buildDetails(validStocks,techR,newsR,chipsR);
-    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
-只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
-純 JSON。\n\n${details}`;
+    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
@@ -676,46 +627,6 @@ export default function App(){
       setMarketRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
     }catch{setMarketRecs({buy:[],sell:[],error:true});}
     setMarketLoad(false);setMarketPhase("");
-  };
-
-  // ── 類股 ────────────────────────────────────────────────────────────────────
-  const loadSectors=async()=>{
-    setSectorLoading(true);
-    try{
-      const allTickers=[...new Set(SECTORS.flatMap(s=>s.tickers))];
-      const data=await fetchSectorBatch(allTickers);
-      const result={};
-      SECTORS.forEach(sector=>{
-        result[sector.id]=sector.tickers.map(t=>({ticker:t,...data[t],name:TW_NAMES[t]||t})).filter(s=>s.pct!=null).sort((a,b)=>b.pct-a.pct).slice(0,3);
-      });
-      setSectorStocks(result);
-    }catch(e){
-      console.error("loadSectors error",e);
-    }finally{
-      setSectorLoading(false);
-    }
-  };
-  useEffect(()=>{if(tab==="sectors"&&!Object.keys(sectorStocks).length) loadSectors();},[tab]);
-
-  const analyzeSector=async(sector)=>{
-    const list=sectorStocks[sector.id];
-    if(!list?.length) return;
-    setSectorAnalyzing(prev=>({...prev,[sector.id]:true}));
-
-    const techR=await Promise.all(list.map(s=>fetchTechnicals(s.ticker)));
-    const newsR=await Promise.all(list.map(s=>fetchNews(s.name,s.ticker)));
-    const chipsR=await Promise.all(list.map(s=>fetchChips(s.ticker)));
-
-    await sleep(800);
-
-    const details=buildDetails(list,techR,newsR,chipsR);
-    const prompt=`你是股票分析師。請分析台股「${sector.name}」類股今日前3大漲幅標的（繁體中文，200字內）。
-結合技術面、籌碼面與新聞，說明：①類股整體動能 ②籌碼面動向 ③最值得關注的標的 ④短線操作建議。\n${details}`;
-    try{
-      const text=await callAI(prompt);
-      setSectorAnalysis(prev=>({...prev,[sector.id]:text}));
-    }catch{setSectorAnalysis(prev=>({...prev,[sector.id]:"⚠️ 分析失敗，請重試"}));}
-    setSectorAnalyzing(prev=>({...prev,[sector.id]:false}));
   };
 
   const watchData=tickers.map(t=>stocks[t]).filter(Boolean);
@@ -733,12 +644,11 @@ export default function App(){
       `}</style>
       <div style={{height:48}}/>
 
-      {/* Header */}
       <div style={{padding:"0 20px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
         <div>
           <div style={{fontSize:11,color:C.sub,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>StockMin</div>
           <div style={{fontSize:26,fontWeight:900,color:C.text,lineHeight:1}}>{tab==="ai"?"AI 推薦":tab==="sectors"?"類股分析":"自選股"}</div>
-          {lastFetch&&<div style={{fontSize:10,color:C.sub,marginTop:4}}>更新 {lastFetch.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}{autoRefresh&&` · 每${refreshInterval}秒自動刷新`}</div>}
+          {lastFetch&&<div style={{fontSize:10,color:C.sub,marginTop:4}}>更新 {lastFetch.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}{autoRefresh&&` · 每${refreshInterval}秒刷新`}</div>}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {fetching&&<div style={{width:16,height:16,border:`2px solid ${C.green}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>}
@@ -748,7 +658,6 @@ export default function App(){
         </div>
       </div>
 
-      {/* Tab */}
       <div style={{margin:"0 20px 20px",background:C.card,borderRadius:14,padding:4,display:"flex",border:`1px solid ${C.border}`}}>
         {[{id:"ai",label:"✦ AI"},{id:"sectors",label:"📊 類股"},{id:"watch",label:"☆ 自選"}].map(t=>(
           <button key={t.id} onClick={()=>{setTab(t.id);setEditing(false);}} style={{flex:1,padding:"10px 0",borderRadius:11,border:"none",background:tab===t.id?C.green:"transparent",color:tab===t.id?C.bg:C.sub,fontWeight:800,fontSize:13,cursor:"pointer",transition:"all .2s",fontFamily:C.sans}}>{t.label}</button>
@@ -757,7 +666,7 @@ export default function App(){
 
       <div style={{padding:"0 16px 100px"}}>
 
-        {/* ── AI 推薦 ── */}
+        {/* AI 推薦 */}
         {tab==="ai"&&(
           <>
             <div style={{marginBottom:24}}>
@@ -765,7 +674,7 @@ export default function App(){
                 <div style={{width:3,height:18,borderRadius:99,background:C.gold}}/>
                 <span style={{fontSize:14,fontWeight:800,color:C.gold}}>市場熱門</span>
                 <div style={{flex:1,height:1,background:C.goldBd}}/>
-                <span style={{fontSize:10,color:C.sub}}>動態抓取 · 含籌碼分析</span>
+                <span style={{fontSize:10,color:C.sub}}>動態抓取 · 含籌碼</span>
               </div>
               <button onClick={generateMarketRecs} disabled={marketLoad} style={{width:"100%",padding:"12px 0",borderRadius:14,border:`1px solid ${C.goldBd}`,background:marketLoad?C.dim:C.goldBg,color:marketLoad?C.sub:C.gold,fontWeight:800,fontSize:14,cursor:marketLoad?"default":"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
                 {marketLoad?<><div style={{width:14,height:14,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> {marketPhase}</>:marketRecs?"↻ 重新分析":"✦ 分析市場熱門股"}
@@ -773,22 +682,14 @@ export default function App(){
               {marketRecs&&!marketLoad&&(
                 <>
                   {marketRecs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
-                  {marketRecs.buy?.length>0&&<div style={{marginBottom:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.green}}/><span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span><div style={{flex:1,height:1,background:C.greenBd}}/><span style={{fontSize:11,color:C.sub}}>{marketRecs.buy.length} 檔</span></div>
-                    {marketRecs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}
-                  </div>}
-                  {marketRecs.sell?.length>0&&<div style={{marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.red}}/><span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span><div style={{flex:1,height:1,background:C.redBd}}/><span style={{fontSize:11,color:C.sub}}>{marketRecs.sell.length} 檔</span></div>
-                    {marketRecs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}
-                  </div>}
+                  {marketRecs.buy?.length>0&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.green}}/><span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span><div style={{flex:1,height:1,background:C.greenBd}}/><span style={{fontSize:11,color:C.sub}}>{marketRecs.buy.length} 檔</span></div>{marketRecs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}</div>}
+                  {marketRecs.sell?.length>0&&<div style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.red}}/><span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span><div style={{flex:1,height:1,background:C.redBd}}/><span style={{fontSize:11,color:C.sub}}>{marketRecs.sell.length} 檔</span></div>{marketRecs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}</div>}
                 </>
               )}
             </div>
-
             <div style={{height:1,background:C.border,marginBottom:24}}/>
             <UndervaluedSection watchTickers={tickers}/>
             <div style={{height:1,background:C.border,marginBottom:24}}/>
-
             <div>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:3,height:18,borderRadius:99,background:C.green}}/>
@@ -803,14 +704,8 @@ export default function App(){
               {recs&&!recsLoad&&(
                 <>
                   {recs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
-                  {recs.buy?.length>0&&<div style={{marginBottom:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.green}}/><span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span><div style={{flex:1,height:1,background:C.greenBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.buy.length} 檔</span></div>
-                    {recs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}
-                  </div>}
-                  {recs.sell?.length>0&&<div style={{marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.red}}/><span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span><div style={{flex:1,height:1,background:C.redBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.sell.length} 檔</span></div>
-                    {recs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}
-                  </div>}
+                  {recs.buy?.length>0&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.green}}/><span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span><div style={{flex:1,height:1,background:C.greenBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.buy.length} 檔</span></div>{recs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}</div>}
+                  {recs.sell?.length>0&&<div style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.red}}/><span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span><div style={{flex:1,height:1,background:C.redBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.sell.length} 檔</span></div>{recs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}</div>}
                 </>
               )}
             </div>
@@ -820,21 +715,38 @@ export default function App(){
           </>
         )}
 
-        {/* ── 類股分析 ── */}
+        {/* 類股分析（動態版）*/}
         {tab==="sectors"&&(
           <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontSize:13,color:C.sub}}>各類股當日前3大漲幅</div>
+              <div>
+                <div style={{fontSize:13,color:C.sub}}>TWSE 13 類 · 即時漲幅前3大</div>
+                {sectorLastUpdate&&<div style={{fontSize:10,color:C.dim,marginTop:2}}>資料時間：{sectorLastUpdate.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}</div>}
+              </div>
               <button onClick={loadSectors} disabled={sectorLoading} style={{padding:"6px 14px",borderRadius:99,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                 {sectorLoading?<><div style={{width:12,height:12,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 載入中</>:"↻ 更新"}
               </button>
             </div>
-            {sectorLoading&&!Object.keys(sectorStocks).length&&<div style={{textAlign:"center",padding:"40px 0",color:C.sub}}><div style={{width:24,height:24,border:`2px solid ${C.blue}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 12px"}}/>抓取各類股資料中...</div>}
-            {SECTORS.map(sector=><SectorCard key={sector.id} sector={sector} stocks={sectorStocks[sector.id]||[]} analysis={sectorAnalysis[sector.id]||null} loading={sectorAnalyzing[sector.id]||false} onAnalyze={()=>analyzeSector(sector)}/>)}
+            {sectorLoading&&!sectors.length&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:C.sub}}>
+                <div style={{width:24,height:24,border:`2px solid ${C.blue}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 12px"}}/>
+                <div>從 TWSE 抓取全市場資料中...</div>
+                <div style={{fontSize:11,marginTop:6}}>首次載入約需 10-15 秒</div>
+              </div>
+            )}
+            {sectors.map(sector=>(
+              <SectorCard
+                key={sector.id}
+                sector={sector}
+                analysis={sectorAnalysis[sector.id]||null}
+                loading={sectorAnalyzing[sector.id]||false}
+                onAnalyze={()=>analyzeSector(sector)}
+              />
+            ))}
           </>
         )}
 
-        {/* ── 自選股 ── */}
+        {/* 自選股 */}
         {tab==="watch"&&(
           <>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
@@ -871,7 +783,6 @@ export default function App(){
         )}
       </div>
 
-      {/* Bottom Nav */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.surface,borderTop:`1px solid ${C.border}`,padding:"12px 20px 32px",display:"flex",justifyContent:"space-around",zIndex:50}}>
         {[{id:"ai",icon:"✦",label:"AI 推薦"},{id:"sectors",icon:"📊",label:"類股"},{id:"watch",icon:"☆",label:"自選股"}].map(t=>(
           <button key={t.id} onClick={()=>{setTab(t.id);setEditing(false);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:"transparent",border:"none",cursor:"pointer",padding:"2px 12px"}}>
@@ -881,7 +792,6 @@ export default function App(){
         ))}
       </div>
 
-      {/* 自動刷新選單 */}
       {showIntervalPicker&&(
         <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>setShowIntervalPicker(false)}>
           <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none"}} onClick={e=>e.stopPropagation()}>
