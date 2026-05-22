@@ -99,7 +99,12 @@ export default async function handler(req, res) {
         id:     sector.id,
         name:   sector.name,
         icon:   sector.icon,
-        stocks: all.filter(s => !isNaN(s.pct)).sort((a,b) => b.pct - a.pct).slice(0,3),
+        sstocks: all
+          .filter(s => !isNaN(s.pct) && s.volume > 0)
+          .sort((a,b) => b.volume * b.price - a.volume * a.price) // 先按成交金額排
+          .slice(0,20)
+          .sort((a,b) => b.pct - a.pct) // 再取漲幅前3
+          .slice(0,3),
         total:  all.length,
       };
     });
