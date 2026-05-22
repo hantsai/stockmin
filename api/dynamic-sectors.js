@@ -51,21 +51,21 @@ export default async function handler(req, res) {
     // 建立股票資料 map
     const stockMap = {};
     prices.forEach(s => {
-      const code = s["證券代號"];
-      if (!code) return;
-      const close = parseFloat(s["收盤價"]?.replace(/,/g,""));
-      const open  = parseFloat(s["開盤價"]?.replace(/,/g,""));
-      const change = parseFloat(s["漲跌價差"]?.replace(/,/g,""));
+      const code = s["Code"];
+      if (!code || code.includes("A") || code.includes("B")) return; // 排除 ETF
+      const close = parseFloat(s["ClosingPrice"]?.replace(/,/g,""));
+      const change = parseFloat(s["Change"]?.replace(/,/g,""));
+      if (isNaN(close) || isNaN(change)) return;
       const prevClose = close - change;
-      if (isNaN(close) || isNaN(change) || prevClose <= 0) return;
+      if (prevClose <= 0) return;
       const pct = +((change / prevClose) * 100).toFixed(2);
       stockMap[code] = {
         ticker:   `${code}.TW`,
-        name:     s["證券名稱"]?.trim() || code,
+        name:     s["Name"]?.trim() || code,
         price:    close,
         change:   +change.toFixed(2),
         pct,
-        volume:   parseInt(s["成交股數"]?.replace(/,/g,"") || "0"),
+        volume:   parseInt(s["TradeVolume"]?.replace(/,/g,"") || "0"),
         currency: "TWD",
       };
     });
