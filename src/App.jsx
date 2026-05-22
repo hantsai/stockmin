@@ -681,13 +681,19 @@ export default function App(){
   // ── 類股 ────────────────────────────────────────────────────────────────────
   const loadSectors=async()=>{
     setSectorLoading(true);
-    const allTickers=[...new Set(SECTORS.flatMap(s=>s.tickers))];
-    const data=await fetchSectorBatch(allTickers);
-    const result={};
-    SECTORS.forEach(sector=>{
-      result[sector.id]=sector.tickers.map(t=>({ticker:t,...data[t],name:TW_NAMES[t]||t})).filter(s=>s.pct!=null).sort((a,b)=>b.pct-a.pct).slice(0,3);
-    });
-    setSectorStocks(result);setSectorLoading(false);
+    try{
+      const allTickers=[...new Set(SECTORS.flatMap(s=>s.tickers))];
+      const data=await fetchSectorBatch(allTickers);
+      const result={};
+      SECTORS.forEach(sector=>{
+        result[sector.id]=sector.tickers.map(t=>({ticker:t,...data[t],name:TW_NAMES[t]||t})).filter(s=>s.pct!=null).sort((a,b)=>b.pct-a.pct).slice(0,3);
+      });
+      setSectorStocks(result);
+    }catch(e){
+      console.error("loadSectors error",e);
+    }finally{
+      setSectorLoading(false);
+    }
   };
   useEffect(()=>{if(tab==="sectors"&&!Object.keys(sectorStocks).length) loadSectors();},[tab]);
 
