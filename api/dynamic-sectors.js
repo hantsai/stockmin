@@ -92,14 +92,14 @@ export default async function handler(req, res) {
       sectorGroups[match.id].push(stock);
     });
 
-    // 每個類股排序取前3（漲幅最高）
+    // 每個類股：成交金額前20大，再取漲幅前3
     const result = SELECTED_SECTORS.map(sector => {
       const all = sectorGroups[sector.id] || [];
       return {
         id:     sector.id,
         name:   sector.name,
         icon:   sector.icon,
-        sstocks: all
+        stocks: all
           .filter(s => !isNaN(s.pct) && s.volume > 0)
           .sort((a,b) => b.volume * b.price - a.volume * a.price) // 先按成交金額排
           .slice(0,20)
