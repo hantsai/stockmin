@@ -493,6 +493,74 @@ function AnalysisModal({stock,onClose}){
   );
 }
 
+function UndervaluedDetailModal({s, children}){
+  const[open,setOpen]=useState(false);
+  const[text,setText]=useState("");
+  const[loading,setLoading]=useState(false);
+
+  const analyze=async()=>{
+    if(text) return;
+    setLoading(true);
+    const prompt=`你是價值投資分析師，針對「${s.name}（${s.ticker}）」給出詳細低估分析（繁體中文，200字內）。
+低估理由：${s.reason}
+上漲潛力：${s.potential}
+主要風險：${s.risk}
+
+請依格式輸出：
+【低估原因詳析】深入說明為何被低估
+【催化劑】何種條件會觸發股價回升
+【目標價位】合理估值區間
+【風險控管】停損與注意事項`;
+    try{
+      const result=await callAI(prompt);
+      setText(result);
+    }catch{setText("⚠️ 分析暫時無法使用");}
+    setLoading(false);
+  };
+
+  return(
+    <>
+      <div onClick={()=>{setOpen(true);analyze();}}>{children}</div>
+      {open&&(
+        <div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+          <div onClick={()=>setOpen(false)} style={{flex:1,background:"rgba(8,11,18,0.85)",backdropFilter:"blur(4px)"}}/>
+          <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"80vh",overflowY:"auto"}}>
+            <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:900,color:C.text}}>{s.name}</div>
+                <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div>
+              </div>
+              <div style={{background:C.purpleBg,border:`1px solid ${C.purpleBd}`,borderRadius:10,padding:"6px 12px"}}>
+                <div style={{fontSize:13,fontWeight:800,color:C.purple}}>💎 潛力低估</div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{fontSize:10,color:C.sub,marginBottom:2}}>上漲潛力</div>
+                <div style={{fontSize:12,color:C.green}}>{s.potential}</div>
+              </div>
+              <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{fontSize:10,color:C.sub,marginBottom:2}}>主要風險</div>
+                <div style={{fontSize:12,color:C.red}}>{s.risk}</div>
+              </div>
+            </div>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:100}}>
+              <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 詳細分析</div>
+              {loading&&(
+                <div style={{display:"flex",gap:4,padding:"8px 0"}}>
+                  {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.purple,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+                </div>
+              )}
+              <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{text}</div>
+            </div>
+            <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 function UndervaluedSection({watchTickers}){
   const[result,setResult]=useState(null);
   const[loading,setLoading]=useState(false);
@@ -537,10 +605,15 @@ function UndervaluedSection({watchTickers}){
             <div><div style={{fontSize:15,fontWeight:800,color:C.text}}>{s.name}</div><div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div></div>
             <div style={{background:C.purpleBg,border:`1px solid ${C.purpleBd}`,borderRadius:8,padding:"4px 10px",fontSize:11,color:C.purple,fontWeight:700}}>#{i+1}</div>
           </div>
-          <div style={{background:C.purpleBg,borderRadius:10,padding:"8px 10px",marginBottom:6}}>
-            <div style={{fontSize:11,color:C.purple,marginBottom:2}}>💎 低估理由</div>
-            <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{s.reason}</div>
-          </div>
+          <UndervaluedDetailModal s={s}>
+            <div style={{background:C.purpleBg,borderRadius:10,padding:"8px 10px",marginBottom:6,cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                <div style={{fontSize:11,color:C.purple}}>💎 低估理由</div>
+                <div style={{fontSize:10,color:C.purple}}>點擊看詳細分析 ›</div>
+              </div>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.6}}>{s.reason}</div>
+            </div>
+          </UndervaluedDetailModal>
           <div style={{display:"flex",gap:6}}>
             <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"6px 8px"}}><div style={{fontSize:10,color:C.sub,marginBottom:1}}>上漲潛力</div><div style={{fontSize:11,color:C.green}}>{s.potential}</div></div>
             <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"6px 8px"}}><div style={{fontSize:10,color:C.sub,marginBottom:1}}>主要風險</div><div style={{fontSize:11,color:C.red}}>{s.risk}</div></div>
