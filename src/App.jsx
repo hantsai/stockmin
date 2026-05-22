@@ -590,7 +590,10 @@ export default function App(){
     setRecsPhase("AI 分析中...");
     await sleep(800);
     const details=buildDetails(list,techR,newsR,chipsR);
-    const prompt=`你是專業股票分析師。根據以下自選股資料（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
+    const prompt=`你是專業股票分析師。根據以下自選股資料（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
+      重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。
+      只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
+      純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
@@ -618,7 +621,7 @@ export default function App(){
     setMarketPhase("AI 分析中...");
     await sleep(1000);
     const details=buildDetails(validStocks,techR,newsR,chipsR);
-    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
+    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
