@@ -91,23 +91,18 @@ export default async function handler(req, res) {
       matched++;
       sectorGroups[match.id].push(stock);
     });
-    
-    console.log(`matched: ${matched}, unmatched: ${unmatched}`);
-    console.log(`sampleUnmatched: ${JSON.stringify(sampleUnmatched)}`);
-    console.log(`industryMap sample: ${JSON.stringify(Object.entries(industryMap).slice(0,5))}`);
-    console.log(`stockMap sample keys: ${JSON.stringify(Object.keys(stockMap).slice(0,5))}`);
 
     // 每個類股排序取前3（漲幅最高）
-    const result = SELECTED_SECTORS.map(sector => ({
-      id:     sector.id,
-      name:   sector.name,
-      icon:   sector.icon,
-      stocks: (sectorGroups[sector.id] || [])
-        .filter(s => !isNaN(s.pct))
-        .sort((a, b) => b.pct - a.pct)
-        .slice(0, 3),
-      total: (sectorGroups[sector.name] || []).length, // 該類股總成分股數
-    }));
+    const result = SELECTED_SECTORS.map(sector => {
+      const all = sectorGroups[sector.id] || [];
+      return {
+        id:     sector.id,
+        name:   sector.name,
+        icon:   sector.icon,
+        stocks: all.filter(s => !isNaN(s.pct)).sort((a,b) => b.pct - a.pct).slice(0,3),
+        total:  all.length,
+      };
+    });
 
     res.status(200).json({ sectors: result, date: new Date().toISOString() });
 
