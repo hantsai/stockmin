@@ -219,7 +219,7 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
     (async()=>{
       await sleep(300);
       if(cancelled) return;
-      setPhase("AI 深度分析中（約需15-30秒）...");
+      setPhase("AI 深度分析中（約需30-100秒）...");
       try{
         const res=await fetch("/api/deep-analyze",{
           method:"POST",
@@ -242,7 +242,10 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
           setHasFinancials(data.hasFinancials||false);
         }
       }catch(e){
-        if(!cancelled) setText(`⚠️ 分析失敗：${e.message}`);
+        const msg = e.message?.includes("aborted")
+          ? "⚠️ 分析逾時（網路較慢或伺服器忙碌）\n建議切換至 WiFi 後重試，或稍後再試。"
+          : `⚠️ 分析失敗：${e.message}`;
+        if(!cancelled) setText(msg);
       }
       if(!cancelled) setLoading(false);
     })();
@@ -325,7 +328,18 @@ AI建議理由：${r.reason}
     try{
       const result=await callAI(prompt);
       setText(result);
-    }catch{setText("⚠️ 分析暫時無法使用");}
+    }catch(e){
+      // 529 速率限制，等3秒重試一次
+      if(e.message?.includes("529")){
+        await sleep(3000);
+        try{
+          const result=await callAI(prompt);
+          setText(result);    
+        }catch{setText("⚠️ AI 服務繁忙，請稍後重試");}
+      } else {
+        setText("⚠️ 分析暫時無法使用，請稍後重試");
+      }
+    }
     setLoading(false);
   };
 
