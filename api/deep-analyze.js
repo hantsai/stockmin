@@ -1,4 +1,4 @@
-// api/deep-analyze.js — 深度分析（接收財務資料，不用 web search，< 10秒）
+// api/deep-analyze.js — 深度分析（精簡版，適配 Vercel Hobby 10秒限制）
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -13,54 +13,69 @@ export default async function handler(req, res) {
   if (!ticker) return res.status(400).json({ error: "ticker required" });
 
   const sym = ticker.includes(".TW") ? "NT$" : "$";
-  const fmtP = (v) => v != null ? `${(v*100).toFixed(1)}%` : "無資料";
-  const fmtV = (v) => v != null ? v.toLocaleString() : "無資料";
-  const fmtB = (v) => v != null ? `${(v/1e8).toFixed(1)}億` : "無資料";
+  const fmtP = (v) => v != null ? `${(v*100).toFixed(1)}%` : null;
+  const fmtV = (v, d=1) => v != null ? v.toFixed(d) : null;
+  const fmtB = (v) => v != null ? `${(v/1e8).toFixed(1)}億` : null;
 
-  const financialSection = financials?.available ? `
-【財務數據（Yahoo Finance）】
-獲利能力：毛利率 ${fmtP(financials.grossMargin)} | 營業利益率 ${fmtP(financials.operatingMargin)} | 淨利率 ${fmtP(financials.profitMargin)}
-資本效率：ROE ${fmtP(financials.roe)} | ROA ${fmtP(financials.roa)}
-成長率：營收 ${fmtP(financials.revenueGrowth)} | 獲利 ${fmtP(financials.earningsGrowth)}
-財務結構：負債權益比 ${fmtV(financials.debtToEquity)} | 流動比率 ${fmtV(financials.currentRatio?.toFixed(1))}
-現金流：自由現金流 ${fmtB(financials.freeCashflow)} | 現金 ${fmtB(financials.totalCash)}
-估值：本益比 ${fmtV(financials.trailingPE?.toFixed(1))}x | 遠期PE ${fmtV(financials.forwardPE?.toFixed(1))}x | PB ${fmtV(financials.priceToBook?.toFixed(1))}x | EV/EBITDA ${fmtV(financials.evToEbitda?.toFixed(1))}x | Beta ${fmtV(financials.beta?.toFixed(2))}` :
-    "\n【財務數據】無法取得，以訓練資料中的知識推估，請標示「需補充確認」";
+  // ── 即時數據區（明確標示來源）──────────────────────────────────────────────
+  const techLine = tech
+    ? `MA5:${tech.ma5} MA20:${tech.ma20} RSI:${tech.rsi} 量比:${tech.volRatio}x 趨勢:${tech.trend}`
+    : "無資料";
 
-  const techSection = tech ? `
-【技術指標】MA5:${tech.ma5} MA20:${tech.ma20} RSI:${tech.rsi} 量比:${tech.volRatio}x 趨勢:${tech.trend}` : "";
+  const chipsLine = chips?.chips
+    ? `外資:${chips.chips.foreign!=null?(chips.chips.foreign>0?"+":"")+chips.chips.foreign+"張":"-"} 投信:${chips.chips.trust!=null?(chips.chips.trust>0?"+":"")+chips.chips.trust+"張":"-"} 三大:${chips.chips.totalNet!=null?(chips.chips.totalNet>0?"+":"")+chips.chips.totalNet+"張":"-"}`
+    : "無資料";
 
-  const chipsSection = chips?.chips ? `
-【籌碼面】外資:${chips.chips.foreign!=null?(chips.chips.foreign>0?"+":"")+chips.chips.foreign+"張":"-"} 投信:${chips.chips.trust!=null?(chips.chips.trust>0?"+":"")+chips.chips.trust+"張":"-"} 三大合計:${chips.chips.totalNet!=null?(chips.chips.totalNet>0?"+":"")+chips.chips.totalNet+"張":"-"}` : "";
+  // 財務數據：有就列出，沒有就明確說明
+  const finLines = [];
+  if (financials?.available) {
+    if(fmtP(financials.grossMargin))    finLines.push(`毛利率:${fmtP(financials.grossMargin)}`);
+    if(fmtP(financials.operatingMargin))finLines.push(`營業利益率:${fmtP(financials.operatingMargin)}`);
+    if(fmtP(financials.profitMargin))   finLines.push(`淨利率:${fmtP(financials.profitMargin)}`);
+    if(fmtP(financials.roe))            finLines.push(`ROE:${fmtP(financials.roe)}`);
+    if(fmtP(financials.revenueGrowth))  finLines.push(`營收成長:${fmtP(financials.revenueGrowth)}`);
+    if(fmtV(financials.trailingPE))     finLines.push(`本益比:${fmtV(financials.trailingPE)}x`);
+    if(fmtV(financials.priceToBook))    finLines.push(`PB:${fmtV(financials.priceToBook)}x`);
+    if(fmtB(financials.freeCashflow))   finLines.push(`自由現金流:${fmtB(financials.freeCashflow)}`);
+  }
+  const financialLine = finLines.length > 0
+    ? `【即時財務數據（Yahoo Finance）】${finLines.join(" | ")}`
+    : "【財務數據】Yahoo Finance 無法取得即時數據";
 
-  const prompt = `你是「華爾街資深主動型基金經理人」，針對「${name}（${ticker}）」進行深度投資價值審查（繁體中文）。如某數據無法取得請標示「需補充確認」，切勿編造。
+  const prompt = `你是資深股票分析師，針對「${name}（${ticker}）」給出投資評估（繁體中文）。
 
-【當前市場資料】現價：${sym}${price} | 今日：${pct>0?"+":""}${pct}%${techSection}${chipsSection}
-${financialSection}
+重要原則：
+- 以下【即時數據】是真實市場資料，請直接使用
+- 凡是依賴你的訓練資料推估的內容，請在該項目前標示「⚠️ 基於訓練資料」
+- 完全無法確認的數字請標示「需補充確認」，切勿編造
 
-請依以下結構輸出（每節條列，力求簡潔）：
+【即時數據】
+現價：${sym}${price}　今日：${pct>0?"+":""}${pct}%
+技術面：${techLine}
+籌碼面：${chipsLine}
+${financialLine}
 
-【一、商業模式與核心競爭力】
-• 核心收入來源
-• 護城河強度：__/10分，理由：__
-• 未來3-5年成長潛力
+請依以下格式輸出：
 
-【二、財務體質】結論：走強 or 走弱？
-• 獲利與現金流趨勢
-• 資本效率與財務健康度
+【護城河評估】⚠️ 基於訓練資料
+競爭優勢說明，護城河強度：X/10，一句核心理由
 
-【三、估值分析】
-• 與同業比較（高估/合理/低估）
-• 目前市場定價的核心假設
+【財務體質】${finLines.length>0?"依據上方即時數據":"⚠️ 基於訓練資料"}
+走強 or 走弱？一句核心判斷理由
 
-【四、多空辯論】
-• 多頭最強論點
-• 空頭最強論點
-• Base Case：未來12個月展望
+【多頭最強論點】
+• 未被市場完全定價的利多或潛在催化劑（列2-3點，訓練資料推估處標示⚠️）
 
-【五、投資結論】
-• 關鍵催化因素
-• 評等：【買入】/【持有】/【避免】— 三句話核心理由`;
+【空頭最強論點】
+• 主要風險與威脅（列2-3點，訓練資料推估處標示⚠️）
+
+【Base Case】未來12個月最可能的發展（2-3句）
+
+【投資評等】
+評等：【買入】/【持有】/【避免】
+核心理由（三句話）：
+短線（1-3個月）：
+長線（1-2年）：`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -73,10 +88,10 @@ ${financialSection}
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 2500,
+          max_tokens: 900,
           messages: [{ role: "user", content: prompt }],
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(7000),
       });
 
       if (response.status === 529) {
@@ -100,7 +115,7 @@ ${financialSection}
       });
     } catch(e) {
       if (attempt === 1) return res.status(500).json({ error: e.message });
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
 
