@@ -770,7 +770,11 @@ export default function App(){
 純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
-      const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
+      // 嘗試從回應中抽取 JSON
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if(!jsonMatch) throw new Error("No JSON found");
+      const parsed=JSON.parse(jsonMatch[0]);
+
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const enrich=arr=>arr.map(r=>({
         ...r,
@@ -807,7 +811,10 @@ export default function App(){
 純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
-      const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if(!jsonMatch) throw new Error("No JSON found");
+      const parsed=JSON.parse(jsonMatch[0]);
+
       const techMap={};validStocks.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const stockDataMap={};validStocks.forEach(s=>{stockDataMap[s.ticker]=s;});
       const enrich=arr=>arr.map(r=>({
