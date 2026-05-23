@@ -769,11 +769,11 @@ export default function App(){
 只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":"","volRatio":0}}],"sell":[...]}
 純 JSON。\n\n${details}`;
     try{
-      //const text=await callAI(prompt);
+      const text=await callAI(prompt);
       // 嘗試從回應中抽取 JSON
-      //const jsonMatch = text.match(/\{[\s\S]*\}/);
-      //if(!jsonMatch) throw new Error("No JSON found");
-      //const parsed=JSON.parse(jsonMatch[0]);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if(!jsonMatch) throw new Error("No JSON found");
+      const parsed=JSON.parse(jsonMatch[0]);
       const text=await callAI(prompt);
       console.log("AI response:", text);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -911,8 +911,7 @@ export default function App(){
               {!recs&&!recsLoad&&<div style={{background:C.card,border:`1px dashed ${C.border}`,borderRadius:16,padding:24,textAlign:"center"}}><div style={{fontSize:13,color:C.sub,lineHeight:1.8}}>點擊上方按鈕<br/>AI 結合技術面+籌碼面+新聞給出建議</div></div>}
               {recs&&!recsLoad&&(
                 <>
-                  {recs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗：{recs.msg||"請重試"}</div>}
-                  
+                  {recs.error&&<div style={{color:C.gold,fontSize:13,marginBottom:12}}>⚠️ 分析失敗，請重試</div>}
                   {recs.buy?.length>0&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.green}}/><span style={{fontSize:13,fontWeight:800,color:C.green}}>建議買入</span><div style={{flex:1,height:1,background:C.greenBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.buy.length} 檔</span></div>{recs.buy.map(r=><RecCard key={r.ticker} r={r} type="buy"/>)}</div>}
                   {recs.sell?.length>0&&<div style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:3,height:14,borderRadius:99,background:C.red}}/><span style={{fontSize:13,fontWeight:800,color:C.red}}>建議減碼</span><div style={{flex:1,height:1,background:C.redBd}}/><span style={{fontSize:11,color:C.sub}}>{recs.sell.length} 檔</span></div>{recs.sell.map(r=><RecCard key={r.ticker} r={r} type="sell"/>)}</div>}
                 </>
