@@ -55,6 +55,16 @@ const DEFAULT_TICKERS = ["2330.TW","2454.TW","1802.TW","2408.TW","2458.TW","3231
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// 量比術語判斷
+function volInfo(ratio) {
+  if (!ratio) return null;
+  if (ratio >= 2.0) return { label:"大量", color:C.green };
+  if (ratio >= 1.5) return { label:"放量", color:C.green };
+  if (ratio >= 0.8) return { label:"平量", color:C.sub };
+  if (ratio >= 0.5) return { label:"縮量", color:C.red };
+  return { label:"大縮量", color:C.red };
+}
+
 function genMock(base,up){
   let v=base*0.96;
   return Array.from({length:24},()=>{v+=(Math.random()-(up?.42:.58))*base*.008;return{v:+v.toFixed(2)};}).concat([{v:base}]);
@@ -90,7 +100,6 @@ async function fetchSectorBatch(tickers) {
   } catch { return {}; }
 }
 
-// 新：動態類股 API
 async function fetchDynamicSectors() {
   try {
     const res = await fetch(`/api/dynamic-sectors`,{signal:AbortSignal.timeout(20000)});
@@ -144,8 +153,8 @@ function loadWatchlist(){try{const s=localStorage.getItem("stockmin:watchlist");
 function saveWatchlist(t){try{localStorage.setItem("stockmin:watchlist",JSON.stringify(t));}catch{}}
 
 // ── UI Components ─────────────────────────────────────────────────────────────
-function Spark({data,color}){
-  return(<ResponsiveContainer width={64} height={32}><LineChart data={data}><YAxis domain={["auto","auto"]} hide/><Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.8} dot={false}/></LineChart></ResponsiveContainer>);
+function Spark({data,color,width=64,height=32}){
+  return(<ResponsiveContainer width={width} height={height}><LineChart data={data}><YAxis domain={["auto","auto"]} hide/><Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.8} dot={false}/></LineChart></ResponsiveContainer>);
 }
 
 function Badge({label,value,color}){
@@ -184,43 +193,54 @@ function ChipsSection({chips}){
   );
 }
 
+// ── WatchCard（Grid 版，一排兩個）─────────────────────────────────────────────
 function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
   return(
-    <div style={{position:"relative",marginBottom:6}}>
+    <div style={{position:"relative"}}>
       {editing&&<button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>}
-      <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"10px 14px",cursor:editing?"default":"pointer",display:"flex",alignItems:"center",gap:10}}>
-        <div style={{width:72,flexShrink:0}}>
+      <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"12px 12px",cursor:editing?"default":"pointer",height:"100%"}}>
+        {/* 名稱 + 代號 */}
+        <div style={{marginBottom:6}}>
           <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
-          <div style={{fontSize:10,color:C.sub,fontFamily:C.mono,marginTop:1}}>{s.ticker.replace(".TW","")}</div>
+          <div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker.replace(".TW","")}</div>
         </div>
-        <div style={{flex:1,minWidth:0}}><Spark data={s.sparkline} color={col}/></div>
-        <div style={{textAlign:"right",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{s.price.toLocaleString()}</div>
-          <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 7px",marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}>
-            <span style={{fontSize:11}}>{up?"▲":"▼"}</span>
-            <span style={{fontSize:12,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
-          </div>
+        {/* 走勢圖 */}
+        <div style={{marginBottom:6}}>
+          <Spark data={s.sparkline} color={col} width="100%" height={40}/>
+        </div>
+        {/* 價格 */}
+        <div style={{fontSize:13,fontWeight:900,color:C.text,fontFamily:C.mono,marginBottom:4}}>
+          {sym}{s.price.toLocaleString()}
+        </div>
+        {/* 漲跌幅 badge */}
+        <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}>
+          <span style={{fontSize:10}}>{up?"▲":"▼"}</span>
+          <span style={{fontSize:12,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
+          {s.change!=null&&<span style={{fontSize:10,color:col,fontFamily:C.mono}}>{up?"+":""}{s.change}</span>}
         </div>
       </div>
     </div>
   );
 }
 
+// ── RecDetailModal ────────────────────────────────────────────────────────────
 function RecDetailModal({r, type, children}){
   const[open,setOpen]=useState(false);
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(false);
   const isBuy=type==="buy",col=isBuy?C.green:C.red;
   const up=r.pct>=0;
+  const sym=r.ticker?.includes(".TW")?"NT$":"$";
 
   const analyze=async()=>{
-    if(text) return; // 已經分析過就不重複
+    if(text) return;
     setLoading(true);
     const prompt=`你是頂尖股票分析師，針對「${r.name}（${r.ticker}）」給出詳細分析（繁體中文，200字內）。
-今日漲跌：${r.pct>0?"+":""}${r.pct}%
-${r.tech?`技術指標：MA5:${r.tech.ma5} MA20:${r.tech.ma20} RSI:${r.tech.rsi} 趨勢:${r.tech.trend}`:""}
+今日漲跌：${r.pct>0?"+":""}${r.pct}% ${r.change!=null?`(${r.change>0?"+":""}${r.change}元)`:""}
+${r.price?`現價：${sym}${r.price}`:""}
+${r.tech?`技術指標：MA5:${r.tech.ma5} MA20:${r.tech.ma20} RSI:${r.tech.rsi} 趨勢:${r.tech.trend} 量比:${r.tech.volRatio}x`:""}
 AI建議理由：${r.reason}
 
 請依格式輸出：
@@ -248,26 +268,29 @@ AI建議理由：${r.reason}
                 <div style={{fontSize:20,fontWeight:900,color:C.text}}>{r.name}</div>
                 <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{r.ticker}</div>
               </div>
-              <div style={{background:isBuy?C.greenBg:C.redBg,border:`1px solid ${isBuy?C.greenBd:C.redBd}`,borderRadius:10,padding:"6px 12px"}}>
-                <div style={{fontSize:13,fontWeight:800,color:col}}>{isBuy?"建議買入":"建議減碼"}</div>
+              <div style={{textAlign:"right"}}>
+                {r.price&&<div style={{fontSize:18,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{r.price.toLocaleString()}</div>}
+                <div style={{background:isBuy?C.greenBg:C.redBg,border:`1px solid ${isBuy?C.greenBd:C.redBd}`,borderRadius:8,padding:"3px 10px",marginTop:4}}>
+                  <div style={{fontSize:12,fontWeight:800,color:col}}>{isBuy?"建議買入":"建議減碼"}</div>
+                </div>
               </div>
             </div>
-            <div style={{fontSize:13,color:up?C.green:C.red,fontWeight:700,marginBottom:14}}>{up?"▲":"▼"} {Math.abs(r.pct)}% 今日</div>
+            <div style={{fontSize:13,color:up?C.green:C.red,fontWeight:700,marginBottom:14}}>
+              {up?"▲":"▼"} {Math.abs(r.pct)}% 今日
+              {r.change!=null&&<span style={{fontSize:12,marginLeft:8,color:C.sub}}>({r.change>0?"+":""}{r.change}元)</span>}
+            </div>
             {r.tech&&(
               <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
                 {r.tech.ma5&&<Badge label="MA5" value={r.tech.ma5} color={r.tech.ma5>r.tech.ma20?C.green:C.red}/>}
                 {r.tech.ma20&&<Badge label="MA20" value={r.tech.ma20}/>}
                 {r.tech.rsi&&<Badge label="RSI" value={r.tech.rsi} color={r.tech.rsi>70?C.red:r.tech.rsi<30?C.green:C.sub}/>}
+                {r.tech.volRatio&&(()=>{const vi=volInfo(r.tech.volRatio);return <Badge label={`量比 ${r.tech.volRatio}x`} value={vi?.label||"-"} color={vi?.color||C.sub}/>;})()}
                 {r.tech.trend&&<Badge label="趨勢" value={r.tech.trend} color={r.tech.trend.includes("多")?C.green:r.tech.trend.includes("空")?C.red:C.sub}/>}
               </div>
             )}
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:100}}>
               <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 詳細分析</div>
-              {loading&&(
-                <div style={{display:"flex",gap:4,padding:"8px 0"}}>
-                  {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
-                </div>
-              )}
+              {loading&&(<div style={{display:"flex",gap:4,padding:"8px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div>)}
               <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{text}</div>
             </div>
             <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
@@ -278,17 +301,22 @@ AI建議理由：${r.reason}
   );
 }
 
+// ── RecCard（加現價、漲跌金額、量比）────────────────────────────────────────
 function RecCard({r,type}){
   const isBuy=type==="buy",col=isBuy?C.green:C.red,bg=isBuy?C.greenBg:C.redBg,bd=isBuy?C.greenBd:C.redBd;
   const up=r.pct>=0;
+  const sym=r.ticker?.includes(".TW")?"NT$":"$";
+  const vi=r.tech?.volRatio ? volInfo(r.tech.volRatio) : null;
+
   return(
     <div style={{background:C.card,border:`1px solid ${bd}`,borderRadius:16,padding:"14px",marginBottom:10}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      {/* Row 1: 名稱 + 信心圓環 */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
         <div>
           <div style={{fontSize:15,fontWeight:800,color:C.text}}>{r.name}</div>
           <div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{r.ticker}</div>
         </div>
-        <div style={{position:"relative",width:44,height:44}}>
+        <div style={{position:"relative",width:44,height:44,flexShrink:0}}>
           <svg width="44" height="44" viewBox="0 0 44 44" style={{transform:"rotate(-90deg)"}}>
             <circle cx="22" cy="22" r="18" fill="none" stroke={C.dim} strokeWidth="3"/>
             <circle cx="22" cy="22" r="18" fill="none" stroke={col} strokeWidth="3" strokeDasharray={`${2*Math.PI*18*(r.conf||50)/100} ${2*Math.PI*18}`} strokeLinecap="round"/>
@@ -296,15 +324,33 @@ function RecCard({r,type}){
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:col,fontFamily:C.mono}}>{r.conf||"—"}%</div>
         </div>
       </div>
-      <div style={{fontSize:12,color:up?C.green:C.red,fontWeight:700,marginBottom:8}}>{up?"▲":"▼"} {Math.abs(r.pct)}% 今日</div>
+
+      {/* Row 2: 現價 + 漲跌 */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+        {r.price&&<div style={{fontSize:15,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{r.price.toLocaleString()}</div>}
+        <div style={{fontSize:12,color:up?C.green:C.red,fontWeight:700}}>
+          {up?"▲":"▼"} {Math.abs(r.pct)}%
+          {r.change!=null&&<span style={{fontSize:11,marginLeft:4}}>({r.change>0?"+":""}{r.change}元)</span>}
+        </div>
+      </div>
+
+      {/* Row 3: 技術指標 */}
       {r.tech&&(
         <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
           {r.tech.ma5&&<Badge label="MA5" value={r.tech.ma5} color={r.tech.ma5>r.tech.ma20?C.green:C.red}/>}
           {r.tech.ma20&&<Badge label="MA20" value={r.tech.ma20}/>}
           {r.tech.rsi&&<Badge label="RSI" value={r.tech.rsi} color={r.tech.rsi>70?C.red:r.tech.rsi<30?C.green:C.sub}/>}
+          {r.tech.volRatio&&vi&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+              <div style={{fontSize:9,color:C.sub,marginBottom:1}}>量比 {r.tech.volRatio}x</div>
+              <div style={{fontSize:11,fontWeight:800,color:vi.color,fontFamily:C.mono}}>{vi.label}</div>
+            </div>
+          )}
           {r.tech.trend&&<Badge label="趨勢" value={r.tech.trend} color={r.tech.trend.includes("多")?C.green:r.tech.trend.includes("空")?C.red:C.sub}/>}
         </div>
       )}
+
+      {/* Row 4: AI 理由（點擊展開詳細） */}
       <RecDetailModal r={r} type={type}>
         <div style={{background:bg,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
@@ -318,7 +364,7 @@ function RecCard({r,type}){
   );
 }
 
-// ── SectorCard（動態版）────────────────────────────────────────────────────────
+// ── SectorCard ────────────────────────────────────────────────────────────────
 function SectorCard({sector,analysis,loading,onAnalyze}){
   const[expanded,setExpanded]=useState(false);
   const stocks = sector.stocks || [];
@@ -328,17 +374,12 @@ function SectorCard({sector,analysis,loading,onAnalyze}){
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:20}}>{sector.icon}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.text}}>{sector.name}</span>
-          <span style={{fontSize:10,color:C.sub}}>
-            {sector.total ? `${sector.total}支成分股` : "前3大漲幅"}
-          </span>
+          <span style={{fontSize:10,color:C.sub}}>{sector.total?`${sector.total}支成分股`:"前3大漲幅"}</span>
         </div>
         <button onClick={()=>setExpanded(e=>!e)} style={{background:"transparent",border:"none",color:C.sub,fontSize:16,cursor:"pointer"}}>{expanded?"▲":"▼"}</button>
       </div>
-
       {stocks.length===0?(
-        <div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0",marginBottom:12}}>
-          ⚠️ 今日無資料或非交易日
-        </div>
+        <div style={{fontSize:12,color:C.sub,textAlign:"center",padding:"8px 0",marginBottom:12}}>⚠️ 今日無資料或非交易日</div>
       ):(
         <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
           {stocks.map((s,i)=>{
@@ -354,7 +395,6 @@ function SectorCard({sector,analysis,loading,onAnalyze}){
           })}
         </div>
       )}
-
       <button onClick={onAnalyze} disabled={loading||stocks.length===0} style={{width:"100%",padding:"8px 0",borderRadius:10,border:`1px solid ${C.blueBd}`,background:loading?C.dim:C.blueBg,color:loading?C.sub:C.blue,fontWeight:700,fontSize:12,cursor:(loading||stocks.length===0)?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
         {loading?<><div style={{width:12,height:12,border:`2px solid ${C.sub}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 分析中...</>:analysis?"↻ 重新分析":"✦ AI 分析此類股（含籌碼）"}
       </button>
@@ -369,6 +409,7 @@ function SectorCard({sector,analysis,loading,onAnalyze}){
   );
 }
 
+// ── AddSheet ──────────────────────────────────────────────────────────────────
 function AddSheet({existing,onAdd,onClose}){
   const[val,setVal]=useState("");
   const[status,setStatus]=useState("");
@@ -405,6 +446,7 @@ function AddSheet({existing,onAdd,onClose}){
   );
 }
 
+// ── AnalysisModal ─────────────────────────────────────────────────────────────
 function AnalysisModal({stock,onClose}){
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(true);
@@ -444,6 +486,7 @@ function AnalysisModal({stock,onClose}){
     return()=>{cancelled=true;};
   },[]);
   const up=stock.pct>=0,col=up?C.green:C.red,sym=stock.currency==="TWD"?"NT$":"$";
+  const vi=tech?.volRatio ? volInfo(tech.volRatio) : null;
   return(
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(8,11,18,0.85)",backdropFilter:"blur(4px)"}}/>
@@ -463,7 +506,12 @@ function AnalysisModal({stock,onClose}){
               {tech.ma5&&<Badge label="MA5" value={tech.ma5} color={tech.ma5>tech.ma20?C.green:C.red}/>}
               {tech.ma20&&<Badge label="MA20" value={tech.ma20}/>}
               {tech.rsi&&<Badge label="RSI14" value={tech.rsi} color={tech.rsi>70?C.red:tech.rsi<30?C.green:C.sub}/>}
-              {tech.volRatio&&<Badge label="量比" value={`${tech.volRatio}x`} color={tech.volRatio>1.5?C.green:C.sub}/>}
+              {tech.volRatio&&vi&&(
+                <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+                  <div style={{fontSize:9,color:C.sub,marginBottom:1}}>量比 {tech.volRatio}x</div>
+                  <div style={{fontSize:11,fontWeight:800,color:vi.color,fontFamily:C.mono}}>{vi.label}</div>
+                </div>
+              )}
               {tech.trend&&<Badge label="趨勢" value={tech.trend} color={tech.trend.includes("多")?C.green:tech.trend.includes("空")?C.red:C.sub}/>}
               {tech.week52High&&<Badge label="52W高" value={tech.week52High}/>}
               {tech.week52Low&&<Badge label="52W低" value={tech.week52Low}/>}
@@ -493,11 +541,11 @@ function AnalysisModal({stock,onClose}){
   );
 }
 
+// ── UndervaluedDetailModal ────────────────────────────────────────────────────
 function UndervaluedDetailModal({s, children}){
   const[open,setOpen]=useState(false);
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(false);
-
   const analyze=async()=>{
     if(text) return;
     setLoading(true);
@@ -511,13 +559,9 @@ function UndervaluedDetailModal({s, children}){
 【催化劑】何種條件會觸發股價回升
 【目標價位】合理估值區間
 【風險控管】停損與注意事項`;
-    try{
-      const result=await callAI(prompt);
-      setText(result);
-    }catch{setText("⚠️ 分析暫時無法使用");}
+    try{const result=await callAI(prompt);setText(result);}catch{setText("⚠️ 分析暫時無法使用");}
     setLoading(false);
   };
-
   return(
     <>
       <div onClick={()=>{setOpen(true);analyze();}}>{children}</div>
@@ -527,31 +571,18 @@ function UndervaluedDetailModal({s, children}){
           <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"80vh",overflowY:"auto"}}>
             <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div>
-                <div style={{fontSize:20,fontWeight:900,color:C.text}}>{s.name}</div>
-                <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div>
-              </div>
+              <div><div style={{fontSize:20,fontWeight:900,color:C.text}}>{s.name}</div><div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{s.ticker}</div></div>
               <div style={{background:C.purpleBg,border:`1px solid ${C.purpleBd}`,borderRadius:10,padding:"6px 12px"}}>
                 <div style={{fontSize:13,fontWeight:800,color:C.purple}}>💎 潛力低估</div>
               </div>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:14}}>
-              <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"8px 10px"}}>
-                <div style={{fontSize:10,color:C.sub,marginBottom:2}}>上漲潛力</div>
-                <div style={{fontSize:12,color:C.green}}>{s.potential}</div>
-              </div>
-              <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"8px 10px"}}>
-                <div style={{fontSize:10,color:C.sub,marginBottom:2}}>主要風險</div>
-                <div style={{fontSize:12,color:C.red}}>{s.risk}</div>
-              </div>
+              <div style={{flex:1,background:C.greenBg,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:10,color:C.sub,marginBottom:2}}>上漲潛力</div><div style={{fontSize:12,color:C.green}}>{s.potential}</div></div>
+              <div style={{flex:1,background:C.redBg,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:10,color:C.sub,marginBottom:2}}>主要風險</div><div style={{fontSize:12,color:C.red}}>{s.risk}</div></div>
             </div>
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,minHeight:100}}>
               <div style={{fontSize:11,color:C.sub,marginBottom:8}}>✦ AI 詳細分析</div>
-              {loading&&(
-                <div style={{display:"flex",gap:4,padding:"8px 0"}}>
-                  {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.purple,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
-                </div>
-              )}
+              {loading&&<div style={{display:"flex",gap:4,padding:"8px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.purple,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div>}
               <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{text}</div>
             </div>
             <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
@@ -561,6 +592,8 @@ function UndervaluedDetailModal({s, children}){
     </>
   );
 }
+
+// ── UndervaluedSection ────────────────────────────────────────────────────────
 function UndervaluedSection({watchTickers}){
   const[result,setResult]=useState(null);
   const[loading,setLoading]=useState(false);
@@ -644,7 +677,6 @@ export default function App(){
   const[marketRecs,setMarketRecs]=useState(null);
   const[marketLoad,setMarketLoad]=useState(false);
   const[marketPhase,setMarketPhase]=useState("");
-  // 類股（動態版）
   const[sectors,setSectors]=useState([]);
   const[sectorLoading,setSectorLoading]=useState(false);
   const[sectorLastUpdate,setSectorLastUpdate]=useState(null);
@@ -675,21 +707,16 @@ export default function App(){
     setStocks(prev=>{const n={...prev};delete n[ticker];return n;});
   },[]);
 
-  // ── 動態類股載入 ─────────────────────────────────────────────────────────────
   const loadSectors=async()=>{
     setSectorLoading(true);
     try{
       const data=await fetchDynamicSectors();
-      if(data?.sectors) {
-        setSectors(data.sectors);
-        setSectorLastUpdate(new Date());
-      }
+      if(data?.sectors){setSectors(data.sectors);setSectorLastUpdate(new Date());}
     }catch(e){console.error("loadSectors",e);}
     finally{setSectorLoading(false);}
   };
   useEffect(()=>{if(tab==="sectors"&&sectors.length===0) loadSectors();},[tab]);
 
-  // ── 類股 AI 分析 ─────────────────────────────────────────────────────────────
   const analyzeSector=async(sector)=>{
     const list=sector.stocks||[];
     if(!list.length) return;
@@ -701,7 +728,7 @@ export default function App(){
     const details=list.map((s,i)=>{
       const t=techR[i],n=newsR[i],c=chipsR[i];
       return `${s.name}(${s.ticker}) 今日${s.pct>0?"+":""}${s.pct}% 現價NT$${s.price}`+
-        (t?` MA5:${t.ma5} RSI:${t.rsi} 趨勢:${t.trend}`:"") +
+        (t?` MA5:${t.ma5} RSI:${t.rsi} 趨勢:${t.trend} 量比:${t.volRatio}x`:"") +
         (c?.chips?` 外資:${c.chips.foreign!=null?(c.chips.foreign>0?"+":"")+c.chips.foreign+"張":"-"}`:"")+
         (n?.length?` 新聞:${n[0]?.title?.slice(0,20)}`:"");
     }).join("\n");
@@ -713,7 +740,6 @@ export default function App(){
     setSectorAnalyzing(prev=>({...prev,[sector.id]:false}));
   };
 
-  // ── AI 推薦 ──────────────────────────────────────────────────────────────────
   const buildDetails=(list,techR,newsR,chipsR)=>
     list.map((s,i)=>{
       const t=techR?.[i],n=newsR?.[i],c=chipsR?.[i];
@@ -739,14 +765,20 @@ export default function App(){
     await sleep(800);
     const details=buildDetails(list,techR,newsR,chipsR);
     const prompt=`你是專業股票分析師。根據以下自選股資料（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
-      重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。
-      只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}
-      純 JSON。\n\n${details}`;
+重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。
+只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":"","volRatio":0}}],"sell":[...]}
+純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
-      const enrich=arr=>arr.map(r=>({...r,pct:stocks[r.ticker]?.pct??r.pct,tech:techMap[r.ticker]||r.tech||null}));
+      const enrich=arr=>arr.map(r=>({
+        ...r,
+        pct:   stocks[r.ticker]?.pct   ?? r.pct,
+        price: stocks[r.ticker]?.price ?? null,
+        change:stocks[r.ticker]?.change?? null,
+        tech:  techMap[r.ticker] || r.tech || null,
+      }));
       setRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
     }catch{setRecs({buy:[],sell:[],error:true});}
     setRecsLoad(false);setRecsPhase("");
@@ -769,12 +801,21 @@ export default function App(){
     setMarketPhase("AI 分析中...");
     await sleep(1000);
     const details=buildDetails(validStocks,techR,newsR,chipsR);
-    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":""}}],"sell":[...]}純 JSON。\n\n${details}`;
+    const prompt=`你是專業股票分析師。根據以下市場熱門台股（含技術面、籌碼面、新聞），給出買入與減碼建議（繁體中文）。
+重要：pct 必須直接使用資料中提供的今日漲跌幅數字，不可自行估算或改變正負號。
+只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":"","volRatio":0}}],"sell":[...]}
+純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
       const parsed=JSON.parse(text.replace(/```json|```/g,"").trim());
       const techMap={};validStocks.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
-      const enrich=arr=>arr.map(r=>({...r,tech:techMap[r.ticker]||r.tech||null}));
+      const stockDataMap={};validStocks.forEach(s=>{stockDataMap[s.ticker]=s;});
+      const enrich=arr=>arr.map(r=>({
+        ...r,
+        price: stockDataMap[r.ticker]?.price ?? null,
+        change:stockDataMap[r.ticker]?.change?? null,
+        tech:  techMap[r.ticker] || r.tech || null,
+      }));
       setMarketRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
     }catch{setMarketRecs({buy:[],sell:[],error:true});}
     setMarketLoad(false);setMarketPhase("");
@@ -795,6 +836,7 @@ export default function App(){
       `}</style>
       <div style={{height:48}}/>
 
+      {/* Header */}
       <div style={{padding:"0 20px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
         <div>
           <div style={{fontSize:11,color:C.sub,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>StockMin</div>
@@ -809,6 +851,7 @@ export default function App(){
         </div>
       </div>
 
+      {/* Tab */}
       <div style={{margin:"0 20px 20px",background:C.card,borderRadius:14,padding:4,display:"flex",border:`1px solid ${C.border}`}}>
         {[{id:"ai",label:"✦ AI"},{id:"sectors",label:"📊 類股"},{id:"watch",label:"☆ 自選"}].map(t=>(
           <button key={t.id} onClick={()=>{setTab(t.id);setEditing(false);}} style={{flex:1,padding:"10px 0",borderRadius:11,border:"none",background:tab===t.id?C.green:"transparent",color:tab===t.id?C.bg:C.sub,fontWeight:800,fontSize:13,cursor:"pointer",transition:"all .2s",fontFamily:C.sans}}>{t.label}</button>
@@ -866,7 +909,7 @@ export default function App(){
           </>
         )}
 
-        {/* 類股分析（動態版）*/}
+        {/* 類股分析 */}
         {tab==="sectors"&&(
           <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -886,18 +929,12 @@ export default function App(){
               </div>
             )}
             {sectors.map(sector=>(
-              <SectorCard
-                key={sector.id}
-                sector={sector}
-                analysis={sectorAnalysis[sector.id]||null}
-                loading={sectorAnalyzing[sector.id]||false}
-                onAnalyze={()=>analyzeSector(sector)}
-              />
+              <SectorCard key={sector.id} sector={sector} analysis={sectorAnalysis[sector.id]||null} loading={sectorAnalyzing[sector.id]||false} onAnalyze={()=>analyzeSector(sector)}/>
             ))}
           </>
         )}
 
-        {/* 自選股 */}
+        {/* 自選股（Grid 版）*/}
         {tab==="watch"&&(
           <>
             <div style={{display:"flex",gap:8,marginBottom:16}}>
@@ -917,6 +954,7 @@ export default function App(){
                 <div style={{fontSize:10,color:C.sub,marginTop:4}}>{watchData.length} 檔追蹤</div>
               </div>
             </div>
+
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <div style={{display:"flex",gap:6}}>
                 <button onClick={()=>setEditing(e=>!e)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${editing?C.red:C.border}`,background:editing?C.redBg:"transparent",color:editing?C.red:C.sub,fontSize:12,fontWeight:700,cursor:"pointer"}}>{editing?"完成":"✎ 編輯"}</button>
@@ -927,13 +965,19 @@ export default function App(){
               </div>
               <button onClick={()=>setAddOpen(true)} style={{padding:"6px 10px",borderRadius:99,border:`1px solid ${C.greenBd}`,background:C.greenBg,color:C.green,fontSize:12,fontWeight:700,cursor:"pointer"}}>＋ 新增</button>
             </div>
+
             {fetching&&!watchData.length&&<div style={{textAlign:"center",padding:"40px 0",color:C.sub}}><div style={{width:24,height:24,border:`2px solid ${C.green}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 12px"}}/>載入中...</div>}
             {!fetching&&!watchData.length&&<div style={{textAlign:"center",padding:"40px 0"}}><div style={{fontSize:13,color:C.sub,marginBottom:16}}>自選股是空的</div><button onClick={()=>setAddOpen(true)} style={{padding:"10px 20px",borderRadius:12,border:"none",background:C.green,color:C.bg,fontWeight:700,fontSize:14,cursor:"pointer"}}>+ 新增第一檔</button></div>}
-            {watchData.map(s=><WatchCard key={s.ticker} s={s} onTap={setModal} onRemove={removeStock} editing={editing}/>)}
+
+            {/* Grid 佈局：一排兩個 */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {watchData.map(s=><WatchCard key={s.ticker} s={s} onTap={setModal} onRemove={removeStock} editing={editing}/>)}
+            </div>
           </>
         )}
       </div>
 
+      {/* Bottom Nav */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.surface,borderTop:`1px solid ${C.border}`,padding:"12px 20px 32px",display:"flex",justifyContent:"space-around",zIndex:50}}>
         {[{id:"ai",icon:"✦",label:"AI 推薦"},{id:"sectors",icon:"📊",label:"類股"},{id:"watch",icon:"☆",label:"自選股"}].map(t=>(
           <button key={t.id} onClick={()=>{setTab(t.id);setEditing(false);}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,background:"transparent",border:"none",cursor:"pointer",padding:"2px 12px"}}>
@@ -943,6 +987,7 @@ export default function App(){
         ))}
       </div>
 
+      {/* 自動刷新選單 */}
       {showIntervalPicker&&(
         <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>setShowIntervalPicker(false)}>
           <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none"}} onClick={e=>e.stopPropagation()}>
