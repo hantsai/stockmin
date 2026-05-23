@@ -790,8 +790,7 @@ export default function App(){
         tech:  techMap[r.ticker] || r.tech || null,
       }));
       setRecs({buy:enrich(parsed.buy||[]),sell:enrich(parsed.sell||[])});
-    //}catch{setRecs({buy:[],sell:[],error:true});}
-    }catch(e){setRecs({buy:[],sell:[],error:true,msg:e.message});}
+    }catch{setRecs({buy:[],sell:[],error:true});}
     setRecsLoad(false);setRecsPhase("");
   };
 
