@@ -648,7 +648,6 @@ function AnalysisModal({stock,onClose}){
         <button onClick={onClose} style={{width:"100%",marginTop:8,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
         {deepOpen&&<DeepAnalysisModal stock={stock} tech={tech} chips={chips} onClose={()=>setDeepOpen(false)}/>}
 
-        <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
       </div>
     </div>
   );
