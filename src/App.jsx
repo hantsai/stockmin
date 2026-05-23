@@ -446,6 +446,112 @@ function AddSheet({existing,onAdd,onClose}){
   );
 }
 
+// ── DeepAnalysisModal ─────────────────────────────────────────────────────────
+function DeepAnalysisModal({stock, tech, chips, onClose}){
+  const[text,setText]=useState("");
+  const[loading,setLoading]=useState(true);
+  const[phase,setPhase]=useState("抓取財務資料中...");
+  const[truncated,setTruncated]=useState(false);
+  const[hasFinancials,setHasFinancials]=useState(false);
+
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      setPhase("抓取財務資料中...");
+      await new Promise(r=>setTimeout(r,500));
+      if(cancelled) return;
+      setPhase("AI 深度分析中（約需15-30秒）...");
+      try{
+        const res=await fetch("/api/deep-analyze",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            ticker: stock.ticker,
+            name:   stock.name,
+            price:  stock.price,
+            pct:    stock.pct,
+            tech,
+            chips,
+          }),
+          signal: AbortSignal.timeout(60000),
+        });
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data=await res.json();
+        if(!cancelled){
+          setText(data.text||"");
+          setTruncated(data.truncated||false);
+          setHasFinancials(data.hasFinancials||false);
+        }
+      }catch(e){
+        if(!cancelled) setText(`⚠️ 分析失敗：${e.message}`);
+      }
+      if(!cancelled) setLoading(false);
+    })();
+    return()=>{cancelled=true;};
+  },[]);
+
+  const sym=stock.currency==="TWD"?"NT$":"$";
+  const up=stock.pct>=0,col=up?C.green:C.red;
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:150,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+      <div onClick={onClose} style={{flex:1,background:"rgba(8,11,18,0.9)",backdropFilter:"blur(6px)"}}/>
+      <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none",maxHeight:"92vh",overflowY:"auto"}}>
+        <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
+
+        {/* 標題 */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:900,color:C.text}}>{stock.name}</div>
+            <div style={{fontSize:12,color:C.sub,fontFamily:C.mono}}>{stock.ticker}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:20,fontWeight:900,color:C.text,fontFamily:C.mono}}>{sym}{stock.price?.toLocaleString()}</div>
+            <div style={{fontSize:13,color:col,fontWeight:700}}>{up?"▲":"▼"} {Math.abs(stock.pct)}%</div>
+          </div>
+        </div>
+
+        {/* 標籤 */}
+        <div style={{display:"flex",gap:6,marginBottom:16}}>
+          <div style={{background:C.goldBg,border:`1px solid ${C.goldBd}`,borderRadius:8,padding:"3px 10px",fontSize:11,color:C.gold,fontWeight:700}}>
+            ✦ 深度研究報告
+          </div>
+          {hasFinancials&&<div style={{background:C.blueBg,border:`1px solid ${C.blueBd}`,borderRadius:8,padding:"3px 10px",fontSize:11,color:C.blue,fontWeight:700}}>📊 含財務數據</div>}
+          {!hasFinancials&&!loading&&<div style={{background:C.dim,borderRadius:8,padding:"3px 10px",fontSize:11,color:C.sub,fontWeight:700}}>財務資料不足</div>}
+        </div>
+
+        {/* 截斷警告 */}
+        {truncated&&(
+          <div style={{background:"rgba(255,181,71,0.1)",border:`1px solid ${C.goldBd}`,borderRadius:12,padding:"10px 14px",marginBottom:14}}>
+            <div style={{fontSize:12,color:C.gold,fontWeight:700}}>⚠️ 分析內容已達字數上限而截斷</div>
+            <div style={{fontSize:11,color:C.sub,marginTop:4}}>建議分章節單獨查詢，或縮小分析範圍</div>
+          </div>
+        )}
+
+        {/* 載入中 */}
+        {loading&&(
+          <div style={{background:C.card,borderRadius:16,padding:20,textAlign:"center"}}>
+            <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>
+              {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.gold,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+            </div>
+            <div style={{fontSize:13,color:C.sub}}>{phase}</div>
+            <div style={{fontSize:11,color:C.dim,marginTop:6}}>深度分析含財務資料與網路搜尋</div>
+          </div>
+        )}
+
+        {/* 報告內容 */}
+        {!loading&&text&&(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16}}>
+            <div style={{fontSize:11,color:C.sub,marginBottom:10}}>✦ 深度投資研究報告</div>
+            <div style={{fontSize:13,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text}</div>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+      </div>
+    </div>
+  );
+}
+
 // ── AnalysisModal ─────────────────────────────────────────────────────────────
 function AnalysisModal({stock,onClose}){
   const[text,setText]=useState("");
@@ -454,6 +560,7 @@ function AnalysisModal({stock,onClose}){
   const[news,setNews]=useState([]);
   const[chips,setChips]=useState(null);
   const[phase,setPhase]=useState("載入資料中...");
+  const[deepOpen,setDeepOpen]=useState(false);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -535,6 +642,12 @@ function AnalysisModal({stock,onClose}){
           {loading&&!text&&(<div><div style={{display:"flex",gap:4,marginBottom:8}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div><div style={{fontSize:12,color:C.sub}}>{phase}</div></div>)}
           <div style={{fontSize:14,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text}</div>
         </div>
+        <button onClick={()=>setDeepOpen(true)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,border:`1px solid ${C.goldBd}`,background:C.goldBg,color:C.gold,fontWeight:800,fontSize:14,cursor:"pointer"}}>
+          ✦ 深度研究報告（AI + 財務數據）
+        </button>
+        <button onClick={onClose} style={{width:"100%",marginTop:8,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+        {deepOpen&&<DeepAnalysisModal stock={stock} tech={tech} chips={chips} onClose={()=>setDeepOpen(false)}/>}
+
         <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
       </div>
     </div>
