@@ -206,33 +206,47 @@ function WatchCard({s,onTap,onRemove,editing}){
   );
 }
 
-// ── DeepAnalysisModal ─────────────────────────────────────────────────────────
+// ── DeepAnalysisModal（兩步驟版，適配 Vercel Hobby 10秒限制）────────────────
 function DeepAnalysisModal({stock, tech, chips, onClose}){
   const[text,setText]=useState("");
   const[loading,setLoading]=useState(true);
-  const[phase,setPhase]=useState("抓取財務資料中...");
+  const[phase,setPhase]=useState("步驟 1/2：抓取財務資料...");
   const[truncated,setTruncated]=useState(false);
   const[hasFinancials,setHasFinancials]=useState(false);
 
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
-      await sleep(300);
+      // ── Step 1：抓財務資料（< 5秒）────────────────────────────────────────
+      setPhase("步驟 1/2：抓取財務資料...");
+      let financials = null;
+      try{
+        const r=await fetch(`/api/financials?ticker=${encodeURIComponent(stock.ticker)}`,{
+          signal: AbortSignal.timeout(8000),
+        });
+        if(r.ok){
+          const d=await r.json();
+          if(d.available) financials=d;
+        }
+      }catch(e){console.log("financials fetch failed:",e.message);}
       if(cancelled) return;
-      setPhase("AI 深度分析中（約需30-100秒）...");
+
+      // ── Step 2：AI 深度分析（< 9秒）──────────────────────────────────────
+      setPhase("步驟 2/2：AI 深度分析中...");
       try{
         const res=await fetch("/api/deep-analyze",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
-            ticker: stock.ticker,
-            name:   stock.name,
-            price:  stock.price??0,
-            pct:    stock.pct??0,
-            tech:   tech||null,
-            chips:  chips||null,
+            ticker:     stock.ticker,
+            name:       stock.name,
+            price:      stock.price??0,
+            pct:        stock.pct??0,
+            tech:       tech||null,
+            chips:      chips||null,
+            financials: financials,
           }),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(12000),
         });
         if(!res.ok) throw new Error(`HTTP ${res.status}`);
         const data=await res.json();
@@ -242,10 +256,12 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
           setHasFinancials(data.hasFinancials||false);
         }
       }catch(e){
-        const msg = e.message?.includes("aborted")
-          ? "⚠️ 分析逾時（網路較慢或伺服器忙碌）\n建議切換至 WiFi 後重試，或稍後再試。"
-          : `⚠️ 分析失敗：${e.message}`;
-        if(!cancelled) setText(msg);
+        if(!cancelled){
+          const msg=e.message?.includes("aborted")
+            ? "⚠️ 分析逾時，請切換 WiFi 後重試"
+            : `⚠️ 分析失敗：${e.message}`;
+          setText(msg);
+        }
       }
       if(!cancelled) setLoading(false);
     })();
@@ -286,7 +302,7 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
               {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.gold,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
             </div>
             <div style={{fontSize:13,color:C.sub}}>{phase}</div>
-            <div style={{fontSize:11,color:C.dim,marginTop:6}}>含財務資料與網路搜尋，約需 15-30 秒</div>
+            <div style={{fontSize:11,color:C.dim,marginTop:6}}>分兩步驟執行，約需 10-20 秒</div>
           </div>
         )}
         {!loading&&text&&(
@@ -328,18 +344,7 @@ AI建議理由：${r.reason}
     try{
       const result=await callAI(prompt);
       setText(result);
-    }catch(e){
-      // 529 速率限制，等3秒重試一次
-      if(e.message?.includes("529")){
-        await sleep(3000);
-        try{
-          const result=await callAI(prompt);
-          setText(result);    
-        }catch{setText("⚠️ AI 服務繁忙，請稍後重試");}
-      } else {
-        setText("⚠️ 分析暫時無法使用，請稍後重試");
-      }
-    }
+    }catch{setText("⚠️ 分析暫時無法使用");}
     setLoading(false);
   };
 
