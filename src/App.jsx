@@ -293,7 +293,11 @@ AI建議理由：${r.reason}
               {loading&&(<div style={{display:"flex",gap:4,padding:"8px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div>)}
               <div style={{fontSize:14,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{text}</div>
             </div>
-            <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+            <button onClick={()=>setDeepOpen(true)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,border:`1px solid ${C.goldBd}`,background:C.goldBg,color:C.gold,fontWeight:800,fontSize:14,cursor:"pointer"}}>
+              ✦ 深度研究報告（AI + 財務數據）
+            </button>
+            <button onClick={()=>setOpen(false)} style={{width:"100%",marginTop:8,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
+            {deepOpen&&<DeepAnalysisModal stock={{ticker:r.ticker,name:r.name,price:r.price,pct:r.pct,currency:r.ticker?.includes(".TW")?"TWD":"USD"}} tech={r.tech} chips={null} onClose={()=>setDeepOpen(false)}/>}
           </div>
         </div>
       )}
@@ -560,7 +564,6 @@ function AnalysisModal({stock,onClose}){
   const[news,setNews]=useState([]);
   const[chips,setChips]=useState(null);
   const[phase,setPhase]=useState("載入資料中...");
-  const[deepOpen,setDeepOpen]=useState(false);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -642,11 +645,7 @@ function AnalysisModal({stock,onClose}){
           {loading&&!text&&(<div><div style={{display:"flex",gap:4,marginBottom:8}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}</div><div style={{fontSize:12,color:C.sub}}>{phase}</div></div>)}
           <div style={{fontSize:14,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text}</div>
         </div>
-        <button onClick={()=>setDeepOpen(true)} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,border:`1px solid ${C.goldBd}`,background:C.goldBg,color:C.gold,fontWeight:800,fontSize:14,cursor:"pointer"}}>
-          ✦ 深度研究報告（AI + 財務數據）
-        </button>
         <button onClick={onClose} style={{width:"100%",marginTop:8,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
-        {deepOpen&&<DeepAnalysisModal stock={stock} tech={tech} chips={chips} onClose={()=>setDeepOpen(false)}/>}
 
       </div>
     </div>
