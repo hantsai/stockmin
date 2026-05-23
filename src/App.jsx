@@ -769,9 +769,15 @@ export default function App(){
 只回傳 JSON：{"buy":[{"ticker":"","name":"","pct":0,"conf":0,"reason":"30字內，含技術/籌碼/新聞依據","tech":{"ma5":0,"ma20":0,"rsi":0,"trend":"","volRatio":0}}],"sell":[...]}
 純 JSON。\n\n${details}`;
     try{
-      const text=await callAI(prompt);
+      //const text=await callAI(prompt);
       // 嘗試從回應中抽取 JSON
+      //const jsonMatch = text.match(/\{[\s\S]*\}/);
+      //if(!jsonMatch) throw new Error("No JSON found");
+      //const parsed=JSON.parse(jsonMatch[0]);
+      const text=await callAI(prompt);
+      console.log("AI response:", text);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
+      console.log("JSON match:", jsonMatch?.[0]?.slice(0,200));
       if(!jsonMatch) throw new Error("No JSON found");
       const parsed=JSON.parse(jsonMatch[0]);
 
