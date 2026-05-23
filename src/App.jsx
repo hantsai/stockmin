@@ -883,17 +883,15 @@ export default function App(){
 純 JSON。\n\n${details}`;
     try{
       const text=await callAI(prompt);
-      // 嘗試從回應中抽取 JSON
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error("No JSON found");
-      const parsed=JSON.parse(jsonMatch[0]);
-      const text=await callAI(prompt);
-      console.log("AI response:", text);
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      console.log("JSON match:", jsonMatch?.[0]?.slice(0,200));
-      if(!jsonMatch) throw new Error("No JSON found");
-      const parsed=JSON.parse(jsonMatch[0]);
+      // 清理常見 JSON 問題（尾隨逗號）
+      const cleaned = jsonMatch[0]
+        .replace(/,\s*}/g, "}")
+        .replace(/,\s*]/g, "]");
+      const parsed=JSON.parse(cleaned);
 
+      
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const enrich=arr=>arr.map(r=>({
         ...r,
@@ -932,8 +930,12 @@ export default function App(){
       const text=await callAI(prompt);
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error("No JSON found");
-      const parsed=JSON.parse(jsonMatch[0]);
-
+      // 清理常見 JSON 問題（尾隨逗號）
+      const cleaned = jsonMatch[0]
+        .replace(/,\s*}/g, "}")
+        .replace(/,\s*]/g, "]");
+      const parsed=JSON.parse(cleaned);
+      
       const techMap={};validStocks.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const stockDataMap={};validStocks.forEach(s=>{stockDataMap[s.ticker]=s;});
       const enrich=arr=>arr.map(r=>({
