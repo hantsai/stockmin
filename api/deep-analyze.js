@@ -87,11 +87,12 @@ ${financialLine}
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          //model: "claude-haiku-4-5-20251001",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 900,
           messages: [{ role: "user", content: prompt }],
         }),
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (response.status === 529) {
