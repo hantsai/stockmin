@@ -1,4 +1,4 @@
-// StockMin — src/App.jsx
+// EasyMoney — src/App.jsx
 import { useState, useEffect, useCallback } from "react";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 
@@ -51,7 +51,7 @@ const UNDERVALUED_POOL = [
   "2049.TW","3008.TW","2327.TW","2337.TW","2474.TW","1476.TW",
 ];
 
-const DEFAULT_TICKERS = ["2330.TW","2454.TW","1802.TW","2408.TW","2458.TW","3231.TW","8069.TW","AAPL","NVDA","TSLA"];
+const DEFAULT_TICKERS = ["2330.TW","2454.TW","0050.TW","NVDA","AAPL","TSLA"];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function volInfo(ratio) {
@@ -140,8 +140,8 @@ async function callAI(prompt) {
   return (await res.json()).text || "";
 }
 
-function loadWatchlist(){try{const s=localStorage.getItem("stockmin:watchlist");return s?JSON.parse(s):DEFAULT_TICKERS;}catch{return DEFAULT_TICKERS;}}
-function saveWatchlist(t){try{localStorage.setItem("stockmin:watchlist",JSON.stringify(t));}catch{}}
+function loadWatchlist(){try{const s=localStorage.getItem("easymoney:watchlist");return s?JSON.parse(s):DEFAULT_TICKERS;}catch{return DEFAULT_TICKERS;}}
+function saveWatchlist(t){try{localStorage.setItem("easymoney:watchlist",JSON.stringify(t));}catch{}}
 
 // ── UI Components ─────────────────────────────────────────────────────────────
 function Spark({data,color,width=64,height=32}){
@@ -939,7 +939,7 @@ export default function App(){
 
       <div style={{padding:"0 20px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
         <div>
-          <div style={{fontSize:11,color:C.sub,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>StockMin</div>
+          <div style={{fontSize:11,color:C.sub,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>EasyMoney</div>
           <div style={{fontSize:26,fontWeight:900,color:C.text,lineHeight:1}}>{tab==="ai"?"AI 推薦":tab==="sectors"?"類股分析":"自選股"}</div>
           {lastFetch&&<div style={{fontSize:10,color:C.sub,marginTop:4}}>更新 {lastFetch.toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}{autoRefresh&&` · 每${refreshInterval}秒刷新`}</div>}
         </div>
@@ -1101,7 +1101,11 @@ export default function App(){
         </div>
       )}
 
-      {modal&&<AnalysisModal stock={modal} onClose={()=>setModal(null)}/>}
+      
+      {/* Copyright */}
+      <div style={{textAlign:"center",padding:"8px 0 4px",fontSize:10,color:C.dim,letterSpacing:1}}>© 2026 EasyMoney by Max · v1.0.0</div>
+
+      {modal&&<AnalysisModal stock={modal} onClose={()=>setModal(null)}/>}}
       {addOpen&&<AddSheet existing={tickers} onAdd={addStock} onClose={()=>setAddOpen(false)}/>}
     </div>
   );
