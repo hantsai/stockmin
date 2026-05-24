@@ -60,7 +60,8 @@ ${financialLine}`;
 
 ${context}
 
-請依以下格式輸出（簡潔條列）：
+請嚴格依照以下格式輸出，不要使用表格，用條列式：
+
 
 【商業模式】⚠️ 基於訓練資料
 • 核心收入來源與客戶結構（一句話）
@@ -113,7 +114,7 @@ ${previousAnalysis}
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 600,
+        max_tokens: 800,
         messages: [{ role: "user", content: prompt }],
       }),
     });
