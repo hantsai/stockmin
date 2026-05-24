@@ -206,62 +206,49 @@ function WatchCard({s,onTap,onRemove,editing}){
   );
 }
 
-// ── DeepAnalysisModal（兩步驟版，適配 Vercel Hobby 10秒限制）────────────────
+// ── DeepAnalysisModal（三步驟版：財務→分析上半→分析下半）───────────────────
 function DeepAnalysisModal({stock, tech, chips, onClose}){
-  const[text,setText]=useState("");
+  const[text1,setText1]=useState("");
+  const[text2,setText2]=useState("");
   const[loading,setLoading]=useState(true);
-  const[phase,setPhase]=useState("步驟 1/2：抓取財務資料...");
-  const[truncated,setTruncated]=useState(false);
+  const[phase,setPhase]=useState("步驟 1/3：抓取財務資料...");
   const[hasFinancials,setHasFinancials]=useState(false);
 
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
-      // ── Step 1：抓財務資料（< 5秒）────────────────────────────────────────
-      setPhase("步驟 1/2：抓取財務資料...");
+      setPhase("步驟 1/3：抓取財務資料...");
       let financials = null;
       try{
-        const r=await fetch(`/api/financials?ticker=${encodeURIComponent(stock.ticker)}`,{
-          signal: AbortSignal.timeout(8000),
-        });
-        if(r.ok){
-          const d=await r.json();
-          if(d.available) financials=d;
-        }
-      }catch(e){console.log("financials fetch failed:",e.message);}
+        const r=await fetch(`/api/financials?ticker=${encodeURIComponent(stock.ticker)}`,{signal:AbortSignal.timeout(8000)});
+        if(r.ok){ const d=await r.json(); if(d.available) financials=d; }
+      }catch(e){console.log("financials failed:",e.message);}
       if(cancelled) return;
 
-      // ── Step 2：AI 深度分析（< 9秒）──────────────────────────────────────
-      setPhase("步驟 2/2：AI 深度分析中...");
+      const body={ticker:stock.ticker,name:stock.name,price:stock.price??0,pct:stock.pct??0,tech:tech||null,chips:chips||null,financials};
+
+      setPhase("步驟 2/3：AI 分析商業模式與財務...");
+      let part1Text="";
       try{
-        const res=await fetch("/api/deep-analyze",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            ticker:     stock.ticker,
-            name:       stock.name,
-            price:      stock.price??0,
-            pct:        stock.pct??0,
-            tech:       tech||null,
-            chips:      chips||null,
-            financials: financials,
-          }),
-          signal: AbortSignal.timeout(12000),
-        });
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data=await res.json();
-        if(!cancelled){
-          setText(data.text||"");
-          setTruncated(data.truncated||false);
-          setHasFinancials(data.hasFinancials||false);
-        }
+        const r=await fetch("/api/deep-analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,part:1})});
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d=await r.json();
+        part1Text=d.text||"";
+        if(!cancelled){ setText1(part1Text); setHasFinancials(d.hasFinancials||false); }
       }catch(e){
-        if(!cancelled){
-          const msg=e.message?.includes("aborted")
-            ? "⚠️ 分析逾時，請切換 WiFi 後重試"
-            : `⚠️ 分析失敗：${e.message}`;
-          setText(msg);
-        }
+        if(!cancelled){ setText1(`⚠️ 分析失敗：${e.message}`); setLoading(false); }
+        return;
+      }
+      if(cancelled) return;
+
+      setPhase("步驟 3/3：AI 分析多空辯論與投資結論...");
+      try{
+        const r=await fetch("/api/deep-analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,part:2,previousAnalysis:part1Text})});
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d=await r.json();
+        if(!cancelled) setText2(d.text||"");
+      }catch(e){
+        if(!cancelled) setText2(`⚠️ 第二段分析失敗：${e.message}`);
       }
       if(!cancelled) setLoading(false);
     })();
@@ -290,25 +277,25 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
           {hasFinancials&&!loading&&<div style={{background:C.blueBg,border:`1px solid ${C.blueBd}`,borderRadius:8,padding:"3px 10px",fontSize:11,color:C.blue,fontWeight:700}}>📊 含財務數據</div>}
           {!hasFinancials&&!loading&&<div style={{background:C.dim,borderRadius:8,padding:"3px 10px",fontSize:11,color:C.sub,fontWeight:700}}>財務資料不足，以訓練資料推估</div>}
         </div>
-        {truncated&&(
-          <div style={{background:"rgba(255,181,71,0.1)",border:`1px solid ${C.goldBd}`,borderRadius:12,padding:"10px 14px",marginBottom:14}}>
-            <div style={{fontSize:12,color:C.gold,fontWeight:700}}>⚠️ 分析內容已達字數上限而截斷</div>
-            <div style={{fontSize:11,color:C.sub,marginTop:4}}>建議分章節單獨查詢，或縮小分析範圍</div>
-          </div>
-        )}
         {loading&&(
           <div style={{background:C.card,borderRadius:16,padding:20,textAlign:"center"}}>
             <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>
               {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.gold,animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
             </div>
             <div style={{fontSize:13,color:C.sub}}>{phase}</div>
-            <div style={{fontSize:11,color:C.dim,marginTop:6}}>分兩步驟執行，約需 10-20 秒</div>
+            <div style={{fontSize:11,color:C.dim,marginTop:6}}>三步驟執行，約需 20-30 秒</div>
           </div>
         )}
-        {!loading&&text&&(
+        {text1&&(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,marginBottom:10}}>
+            <div style={{fontSize:11,color:C.sub,marginBottom:10}}>✦ 商業模式、財務體質、估值分析</div>
+            <div style={{fontSize:13,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text1}</div>
+          </div>
+        )}
+        {text2&&(
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16}}>
-            <div style={{fontSize:11,color:C.sub,marginBottom:10}}>✦ 深度投資研究報告</div>
-            <div style={{fontSize:13,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text}</div>
+            <div style={{fontSize:11,color:C.sub,marginBottom:10}}>✦ 多空辯論與投資結論</div>
+            <div style={{fontSize:13,color:C.text,lineHeight:2,whiteSpace:"pre-wrap"}}>{text2}</div>
           </div>
         )}
         <button onClick={onClose} style={{width:"100%",marginTop:14,padding:14,borderRadius:14,background:C.dim,border:"none",color:C.sub,fontWeight:700,fontSize:14,cursor:"pointer"}}>關閉</button>
@@ -316,6 +303,7 @@ function DeepAnalysisModal({stock, tech, chips, onClose}){
     </div>
   );
 }
+
 
 // ── RecDetailModal（含深度分析按鈕）──────────────────────────────────────────
 function RecDetailModal({r, type, children}){
