@@ -90,7 +90,7 @@ ${financialLine}
         max_tokens: 600,
         messages: [{ role: "user", content: prompt }],
       }),
-      signal: AbortSignal.timeout(6000),
+      //signal: AbortSignal.timeout(6000),
     });
 
     if (!response.ok) {
