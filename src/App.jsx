@@ -1070,6 +1070,7 @@ export default function App(){
             </div>
           </>
         )}
+        <div style={{textAlign:"center",paddingTop:24,fontSize:10,color:C.sub,letterSpacing:1}}>© 2026 EasyMoney by Max · v1.0.0</div>
       </div>
 
       {/* Bottom Nav */}
@@ -1102,7 +1103,6 @@ export default function App(){
       )}
       {modal&&<AnalysisModal stock={modal} onClose={()=>setModal(null)}/>}
       {addOpen&&<AddSheet existing={tickers} onAdd={addStock} onClose={()=>setAddOpen(false)}/>}
-      <div style={{textAlign:"center",padding:"80px 0 12px",fontSize:10,color:C.sub,letterSpacing:1}}>© 2026 EasyMoney by Max · v1.0.0</div>
     </div>
   );
 }
