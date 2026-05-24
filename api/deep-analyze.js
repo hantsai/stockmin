@@ -77,7 +77,7 @@ ${financialLine}
 短線（1-3個月）：
 長線（1-2年）：`;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 1; attempt++) {
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -89,10 +89,10 @@ ${financialLine}
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
           //model: "claude-sonnet-4-5-20250929",
-          max_tokens: 900,
+          max_tokens: 600,
           messages: [{ role: "user", content: prompt }],
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(6000),
       });
 
       if (response.status === 529) {
