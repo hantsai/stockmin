@@ -75,6 +75,8 @@ ${financialLine}
 短線（1-3個月）：
 長線（1-2年）：`;
 
+  console.log("Starting deep-analyze for", ticker);
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -105,6 +107,7 @@ ${financialLine}
       hasFinancials: !!financials?.available,
     });
   } catch(e) {
+    console.error("deep-analyze error:", e.message, e.name);
     return res.status(500).json({ error: e.message });
   }
 }
