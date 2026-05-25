@@ -876,8 +876,7 @@ S&P500：${fmtIdx(sp500?.price)} ${fmtPct(sp500?.pct)}
 美元/台幣：${fmtIdx(twd?.price)}
 
 【成交量前5大類股】
-${sec.map((s,i)=>`${i+1}. ${s.name} 漲跌${s.pct>0?"+":""}${s.pct}%`).join("
-")||"無資料"}`;
+${sec.map((s,i)=>(i+1)+". "+s.name+" 漲跌"+(s.pct>0?"+":"")+s.pct+"%").join("\n")||"無資料"}`;
 
     // Step 2-4: 四段 AI 分析
     const prompts = [
@@ -938,7 +937,7 @@ ${marketCtx}
         <div style={{width:3,height:18,borderRadius:99,background:"#38bdf8"}}/>
         <span style={{fontSize:14,fontWeight:800,color:"#38bdf8"}}>每日市場報告</span>
         <div style={{flex:1,height:1,background:"rgba(56,189,248,0.3)"}}/>
-        <span style={{fontSize:10,color:C.sub}}>需密碼 · 消耗較多 Token</span>
+        
       </div>
 
       {/* idle 狀態：顯示按鈕 */}
@@ -1228,8 +1227,6 @@ export default function App(){
         {/* AI 推薦 */}
         {tab==="ai"&&(
           <>
-            <MarketReportSection/>
-            <div style={{height:1,background:C.border,marginBottom:24}}/>
             <div style={{marginBottom:24}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:3,height:18,borderRadius:99,background:C.gold}}/>
@@ -1273,6 +1270,8 @@ export default function App(){
             <div style={{background:C.goldBg,border:`1px solid rgba(255,181,71,0.2)`,borderRadius:12,padding:"10px 14px",marginTop:16}}>
               <div style={{fontSize:11,color:C.gold}}>⚠️ AI 建議僅供參考，投資請自行評估風險</div>
             </div>
+            <div style={{height:1,background:C.border,margin:"24px 0"}}/>
+            <MarketReportSection/>
           </>
         )}
 
