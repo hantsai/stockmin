@@ -187,7 +187,7 @@ function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
   return(
-    <div style={{position:"relative",minWidth:0,overflow:"hidden"}}>
+    <div style={{position:"relative"}}>
       {editing&&<button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>}
       <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"12px",cursor:editing?"default":"pointer",height:"100%"}}>
         <div style={{marginBottom:6}}>
@@ -506,7 +506,36 @@ function AddSheet({existing,onAdd,onClose}){
   const[val,setVal]=useState("");
   const[status,setStatus]=useState("");
   const[checking,setChecking]=useState(false);
+  const[searchResults,setSearchResults]=useState([]);
+  const[searching,setSearching]=useState(false);
   const suggestions=["2308.TW","2382.TW","2881.TW","MSFT","GOOGL","META","AMZN","2412.TW"].filter(t=>!existing.includes(t));
+
+  const handleInput=async(raw)=>{
+    const v=raw.toUpperCase();
+    setVal(v);setStatus("");
+    const q=raw.trim();
+    if(!q||q.length<1){setSearchResults([]);return;}
+    // 如果純數字或英文，搜尋台股
+    if(/[一-鿿]/.test(q)||q.length>=2){
+      setSearching(true);
+      try{
+        const r=await fetch(`/api/search?q=${encodeURIComponent(q)}`,{signal:AbortSignal.timeout(5000)});
+        if(r.ok){const d=await r.json();setSearchResults(d.results||[]);}
+      }catch{setSearchResults([]);}
+      setSearching(false);
+    }
+  };
+
+  const selectResult=async(item)=>{
+    setSearchResults([]);
+    if(existing.includes(item.ticker)){setStatus("⚠️ 已在自選股中");return;}
+    setChecking(true);setStatus("驗證股票代號中...");
+    const data=await fetchQuote(item.ticker);
+    setChecking(false);
+    if(data){setStatus(`✓ 找到：${data.name}`);setTimeout(()=>{onAdd(item.ticker,data);onClose();},600);}
+    else setStatus("✗ 找不到此代號，請確認後再試");
+  };
+
   const check=async()=>{
     const t=val.trim().toUpperCase();
     if(!t) return;
@@ -517,21 +546,37 @@ function AddSheet({existing,onAdd,onClose}){
     if(data){setStatus(`✓ 找到：${data.name}`);setTimeout(()=>{onAdd(t,data);onClose();},600);}
     else setStatus("✗ 找不到此代號，請確認後再試");
   };
+
   return(
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(8,11,18,0.85)",backdropFilter:"blur(4px)"}}/>
       <div style={{background:C.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 48px",border:`1px solid ${C.border}`,borderBottom:"none"}}>
         <div style={{width:40,height:4,borderRadius:99,background:C.dim,margin:"0 auto 20px"}}/>
         <div style={{fontSize:18,fontWeight:800,color:C.text,marginBottom:16}}>新增自選股</div>
-        <div style={{display:"flex",gap:8,marginBottom:10}}>
-          <input value={val} onChange={e=>{setVal(e.target.value.toUpperCase());setStatus("");}} onKeyDown={e=>e.key==="Enter"&&check()} placeholder="輸入代號，如 2330.TW 或 AAPL"
-            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:14,outline:"none",fontFamily:C.mono}}/>
+        <div style={{display:"flex",gap:8,marginBottom:6}}>
+          <input value={val} onChange={e=>handleInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&check()} placeholder="輸入代號或中文名稱，如台積電、AAPL"
+            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:14,outline:"none",fontFamily:C.sans}}/>
           <button onClick={check} disabled={checking} style={{padding:"12px 18px",borderRadius:12,border:"none",background:C.green,color:C.bg,fontWeight:800,fontSize:14,cursor:"pointer"}}>{checking?"...":"加入"}</button>
         </div>
+        {/* 搜尋結果 */}
+        {(searchResults.length>0||searching)&&(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
+            {searching&&<div style={{padding:"10px 14px",fontSize:12,color:C.sub}}>搜尋中...</div>}
+            {searchResults.map(item=>(
+              <div key={item.ticker} onClick={()=>selectResult(item)} style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text}}>{item.name}</div>
+                  <div style={{fontSize:11,color:C.sub,fontFamily:C.mono}}>{item.ticker}</div>
+                </div>
+                <div style={{fontSize:11,color:C.green}}>+ 加入</div>
+              </div>
+            ))}
+          </div>
+        )}
         {status&&<div style={{fontSize:13,color:status.startsWith("✓")?C.green:status.startsWith("⚠")?C.gold:C.red,marginBottom:12}}>{status}</div>}
         <div style={{fontSize:12,color:C.sub,marginBottom:10}}>快速加入：</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-          {suggestions.slice(0,6).map(t=><button key={t} onClick={()=>{setVal(t);setStatus("");}} style={{padding:"6px 12px",borderRadius:99,border:`1px solid ${C.border}`,background:C.card,color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.mono}}>{t}</button>)}
+          {suggestions.slice(0,6).map(t=><button key={t} onClick={()=>selectResult({ticker:t,name:t})} style={{padding:"6px 12px",borderRadius:99,border:`1px solid ${C.border}`,background:C.card,color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.mono}}>{t}</button>)}
         </div>
       </div>
     </div>
