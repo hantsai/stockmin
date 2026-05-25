@@ -839,15 +839,15 @@ function MarketReportSection(){
     const {indices:idx, institutionals:inst, topSectors:sec, meta} = ov;
 
     // 格式化數據供 prompt 使用
-    const twii  = idx["^TWII"];
-    const dji   = idx["^DJI"];
-    const sp500 = idx["^GSPC"];
-    const ixic  = idx["^IXIC"];
-    const sox   = idx["^SOX"];
-    const n225  = idx["^N225"];
-    const ks11  = idx["^KS11"];
-    const dxy   = idx["DX-Y.NYB"];
-    const twd   = idx["TWD=X"];
+    const twii  = idx.twii;
+    const dji   = idx.dji;
+    const sp500 = idx.sp500;
+    const ixic  = idx.ixic;
+    const sox   = idx.sox;
+    const n225  = idx.n225;
+    const ks11  = idx.ks11;
+    const dxy   = idx.dxy;
+    const twd   = idx.twd;
 
     const marketCtx = `
 【分析時間】${meta.dateStr} ${meta.timeStr} (台灣時間) | 市場狀態：${
@@ -927,7 +927,7 @@ ${marketCtx}
     setStage("done");
   };
 
-  const twii=overview?.indices?.["^TWII"];
+  const twii=overview?.indices?.twii;
   const meta=overview?.meta;
 
   return(
