@@ -134,6 +134,14 @@ async function fetchMarketTickers(exclude=[]) {
     return ["2330.TW","2454.TW","2317.TW","3711.TW","2308.TW","2303.TW","2882.TW","2357.TW","2382.TW","2412.TW"].filter(t=>!exclude.includes(t)).slice(0,5);
   }
 }
+async function fetchMarketOverview() {
+  try {
+    const res = await fetch(`/api/market-overview`,{signal:AbortSignal.timeout(12000)});
+    if(!res.ok) throw new Error();
+    return await res.json();
+  } catch { return null; }
+}
+
 async function callAI(prompt) {
   const res = await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt})});
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -798,6 +806,219 @@ function UndervaluedSection({watchTickers}){
   );
 }
 
+
+// ── MarketReportSection ───────────────────────────────────────────────────────
+const MARKET_PASSWORD = "12345688";
+
+function MarketReportSection(){
+  const[stage,setStage]=useState("idle"); // idle|auth|loading|done|error
+  const[pwInput,setPwInput]=useState("");
+  const[pwError,setPwError]=useState(false);
+  const[phase,setPhase]=useState("");
+  const[reports,setReports]=useState([]); // [{title,text}]
+  const[overview,setOverview]=useState(null);
+
+  const submitPw=()=>{
+    if(pwInput===MARKET_PASSWORD){ setPwError(false); startAnalysis(); }
+    else{ setPwError(true); setPwInput(""); }
+  };
+
+  const fmtPct=(v)=>v==null?"N/A":`${v>0?"+":""}${v.toFixed(2)}%`;
+  const fmtIdx=(v)=>v==null?"N/A":v.toLocaleString();
+  const fmtInst=(v)=>v==null?"-":`${v>0?"+":""}${v.toLocaleString()}億`;
+
+  const startAnalysis=async()=>{
+    setStage("loading");setReports([]);
+
+    // Step 1: 抓市場數據
+    setPhase("抓取全球市場數據...");
+    const ov=await fetchMarketOverview();
+    if(!ov){ setStage("error"); return; }
+    setOverview(ov);
+
+    const {indices:idx, institutionals:inst, topSectors:sec, meta} = ov;
+
+    // 格式化數據供 prompt 使用
+    const twii  = idx["^TWII"];
+    const dji   = idx["^DJI"];
+    const sp500 = idx["^GSPC"];
+    const ixic  = idx["^IXIC"];
+    const sox   = idx["^SOX"];
+    const n225  = idx["^N225"];
+    const ks11  = idx["^KS11"];
+    const dxy   = idx["DX-Y.NYB"];
+    const twd   = idx["TWD=X"];
+
+    const marketCtx = `
+【分析時間】${meta.dateStr} ${meta.timeStr} (台灣時間) | 市場狀態：${
+  meta.marketStatus==="open"?"盤中":
+  meta.marketStatus==="premarket"?"盤前（美股剛收盤）":
+  meta.marketStatus==="aftermarket"?"收盤後":
+  "週末"
+}
+
+【台股加權指數】${fmtIdx(twii?.price)} | ${fmtPct(twii?.pct)} | 成交量：${twii?.volume?Math.round(twii.volume/1e8).toLocaleString()+"億":"N/A"}
+
+【三大法人（最新交易日）】
+外資：${inst?`${inst.foreign>0?"+":""}${inst.foreign.toLocaleString()}張`:"無資料"}
+投信：${inst?`${inst.trust>0?"+":""}${inst.trust.toLocaleString()}張`:"無資料"}
+自營：${inst?`${inst.dealer>0?"+":""}${inst.dealer.toLocaleString()}張`:"無資料"}
+合計：${inst?`${inst.total>0?"+":""}${inst.total.toLocaleString()}張`:"無資料"}
+
+【全球指數】
+道瓊：${fmtIdx(dji?.price)} ${fmtPct(dji?.pct)}
+S&P500：${fmtIdx(sp500?.price)} ${fmtPct(sp500?.pct)}
+納斯達克：${fmtIdx(ixic?.price)} ${fmtPct(ixic?.pct)}
+費半(SOX)：${fmtIdx(sox?.price)} ${fmtPct(sox?.pct)}
+日經225：${fmtIdx(n225?.price)} ${fmtPct(n225?.pct)}
+韓國KOSPI：${fmtIdx(ks11?.price)} ${fmtPct(ks11?.pct)}
+美元指數：${fmtIdx(dxy?.price)} ${fmtPct(dxy?.pct)}
+美元/台幣：${fmtIdx(twd?.price)}
+
+【成交量前5大類股】
+${sec.map((s,i)=>`${i+1}. ${s.name} 漲跌${s.pct>0?"+":""}${s.pct}%`).join("
+")||"無資料"}`;
+
+    // Step 2-4: 四段 AI 分析
+    const prompts = [
+      {
+        title:"一、台股市場總覽",
+        prompt:`你是台股首席分析師，根據以下即時數據撰寫「台股市場總覽」（繁體中文，不使用Markdown標記語言，200字內）。
+${marketCtx}
+
+請分析：①加權指數今日表現與市場氣氛（強勢/盤整/弱勢）②三大法人動向解讀③成交量意義④市場整體情緒判斷
+重要：數字直接使用上方提供的即時數據，不可自行推測或改變數字。`,
+      },
+      {
+        title:"二、全球市場脈絡",
+        prompt:`你是國際市場分析師，根據以下即時數據撰寫「全球市場對台股的影響」（繁體中文，不使用Markdown標記語言，200字內）。
+${marketCtx}
+
+請分析：①美股三大指數表現及對台股的影響②費半指數對台灣半導體股的指引意義③亞股連動分析④美元指數與台幣走勢的影響
+重要：數字直接使用上方提供的即時數據，不可自行推測或改變數字。`,
+      },
+      {
+        title:"三、產業輪動分析",
+        prompt:`你是產業分析師，根據以下即時數據撰寫「台股產業輪動分析」（繁體中文，不使用Markdown標記語言，200字內）。
+${marketCtx}
+
+請分析：①成交量前5大類股的強弱判斷②資金流向解讀③目前市場主流產業④值得關注的類股輪動機會
+重要：數字直接使用上方提供的即時數據，不可自行推測。如需補充說明請標示⚠️基於訓練資料。`,
+      },
+      {
+        title:"四、展望與操作建議",
+        prompt:`你是台股策略師，根據以下即時數據撰寫「市場展望與操作策略」（繁體中文，不使用Markdown標記語言，200字內）。
+${marketCtx}
+
+請給出：①短線（1-3日）台股展望：偏多/中性/偏空，理由②需關注的關鍵指標或事件③操作策略建議④主要風險提示
+重要：基於上方即時數據推論，訓練資料推估處標示⚠️。`,
+      },
+    ];
+
+    for(let i=0;i<prompts.length;i++){
+      setPhase(`分析中 ${i+1}/4：${prompts[i].title}...`);
+      try{
+        const text=await callAI(prompts[i].prompt);
+        setReports(prev=>[...prev,{title:prompts[i].title,text}]);
+      }catch(e){
+        setReports(prev=>[...prev,{title:prompts[i].title,text:`⚠️ 分析失敗：${e.message}`}]);
+      }
+      if(i<3) await sleep(500);
+    }
+    setStage("done");
+  };
+
+  const twii=overview?.indices?.["^TWII"];
+  const meta=overview?.meta;
+
+  return(
+    <div style={{marginBottom:24}}>
+      {/* 標題列 */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{width:3,height:18,borderRadius:99,background:"#38bdf8"}}/>
+        <span style={{fontSize:14,fontWeight:800,color:"#38bdf8"}}>每日市場報告</span>
+        <div style={{flex:1,height:1,background:"rgba(56,189,248,0.3)"}}/>
+        <span style={{fontSize:10,color:C.sub}}>需密碼 · 消耗較多 Token</span>
+      </div>
+
+      {/* idle 狀態：顯示按鈕 */}
+      {stage==="idle"&&(
+        <button onClick={()=>setStage("auth")} style={{width:"100%",padding:"12px 0",borderRadius:14,border:"1px solid rgba(56,189,248,0.3)",background:"rgba(56,189,248,0.08)",color:"#38bdf8",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          📊 產生今日市場報告
+        </button>
+      )}
+
+      {/* auth 狀態：輸入密碼 */}
+      {stage==="auth"&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16}}>
+          <div style={{fontSize:13,color:C.sub,marginBottom:12}}>請輸入密碼以產生報告</div>
+          <div style={{display:"flex",gap:8}}>
+            <input
+              type="password"
+              value={pwInput}
+              onChange={e=>{setPwInput(e.target.value);setPwError(false);}}
+              onKeyDown={e=>e.key==="Enter"&&submitPw()}
+              placeholder="輸入密碼"
+              style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1px solid ${pwError?C.red:C.border}`,background:C.surface,color:C.text,fontSize:14,outline:"none"}}
+            />
+            <button onClick={submitPw} style={{padding:"10px 16px",borderRadius:10,border:"none",background:"#38bdf8",color:C.bg,fontWeight:800,fontSize:13,cursor:"pointer"}}>確認</button>
+            <button onClick={()=>{setStage("idle");setPwInput("");setPwError(false);}} style={{padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:13,cursor:"pointer"}}>取消</button>
+          </div>
+          {pwError&&<div style={{fontSize:12,color:C.red,marginTop:8}}>⚠️ 密碼錯誤</div>}
+        </div>
+      )}
+
+      {/* loading 狀態 */}
+      {stage==="loading"&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:20}}>
+          <div style={{display:"flex",justifyContent:"center",gap:6,marginBottom:12}}>
+            {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:"#38bdf8",animation:`pulse 1s ${i*.2}s infinite ease-in-out`}}/>)}
+          </div>
+          <div style={{fontSize:13,color:C.sub,textAlign:"center"}}>{phase}</div>
+          <div style={{fontSize:11,color:C.dim,marginTop:6,textAlign:"center"}}>四段式分析，約需 40-60 秒</div>
+          {/* 已完成的段落即時顯示 */}
+          {reports.map((r,i)=>(
+            <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:12,marginTop:12}}>
+              <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:6}}>{r.title}</div>
+              <div style={{fontSize:12,color:C.text,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{r.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* done 狀態 */}
+      {stage==="done"&&(
+        <div>
+          {/* 數據摘要列 */}
+          {twii&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"10px 14px",marginBottom:10,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{fontSize:11,color:C.sub}}>{meta?.dateStr}</div>
+              <div style={{fontSize:13,fontWeight:800,color:C.text,fontFamily:C.mono}}>加權 {twii.price?.toLocaleString()}</div>
+              <div style={{fontSize:12,fontWeight:700,color:twii.pct>=0?C.green:C.red}}>{twii.pct>=0?"▲":"▼"}{Math.abs(twii.pct||0).toFixed(2)}%</div>
+            </div>
+          )}
+          {reports.map((r,i)=>(
+            <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:16,marginBottom:10}}>
+              <div style={{fontSize:11,color:"#38bdf8",fontWeight:700,marginBottom:8}}>{r.title}</div>
+              <div style={{fontSize:13,color:C.text,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{r.text}</div>
+            </div>
+          ))}
+          <button onClick={()=>{setStage("idle");setReports([]);setOverview(null);}} style={{width:"100%",padding:"10px 0",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontWeight:700,fontSize:13,cursor:"pointer",marginTop:4}}>
+            ↻ 重新產生
+          </button>
+        </div>
+      )}
+
+      {stage==="error"&&(
+        <div style={{background:C.card,borderRadius:16,padding:16,textAlign:"center"}}>
+          <div style={{fontSize:13,color:C.red}}>⚠️ 無法取得市場數據，請稍後再試</div>
+          <button onClick={()=>setStage("idle")} style={{marginTop:10,padding:"8px 16px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:12,cursor:"pointer"}}>返回</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App(){
   const[tab,setTab]=useState("watch");
@@ -1007,6 +1228,8 @@ export default function App(){
         {/* AI 推薦 */}
         {tab==="ai"&&(
           <>
+            <MarketReportSection/>
+            <div style={{height:1,background:C.border,marginBottom:24}}/>
             <div style={{marginBottom:24}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
                 <div style={{width:3,height:18,borderRadius:99,background:C.gold}}/>
