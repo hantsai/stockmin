@@ -78,7 +78,13 @@ export default async function handler(req, res) {
         const trust   = toNum(trustRow?.[3]);
         const dealer  = toNum(dealerRow?.[3]);
         const total   = totalRow ? toNum(totalRow[3]) : foreign + trust + dealer;
-        institutionals = { foreign, trust, dealer, total };
+        // BFI82U 單位是千元，換算成億元（÷100000）
+        institutionals = {
+          foreign: Math.round(foreign/100000),
+          trust:   Math.round(trust/100000),
+          dealer:  Math.round(dealer/100000),
+          total:   Math.round(total/100000),
+        };
       }
     }
   } catch(e) { console.log("BFI82U error:", e.message); }
