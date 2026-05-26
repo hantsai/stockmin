@@ -825,7 +825,7 @@ function MarketReportSection(){
 
   const fmtPct=(v)=>v==null?"N/A":`${v>0?"+":""}${v.toFixed(2)}%`;
   const fmtIdx=(v)=>v==null?"N/A":v.toLocaleString();
-  const fmtInst=(v)=>v==null?"-":`${v>0?"+":""}${v.toLocaleString()}億`;
+  const fmtInst=(v)=>v==null?"-":`${v>0?"+":""}${Math.round(v/100000).toLocaleString()}億`;
 
   const startAnalysis=async()=>{
     setStage("loading");setReports([]);
