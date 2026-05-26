@@ -195,15 +195,15 @@ function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
   return(
-    <div style={{position:"relative"}}>
+    <div style={{position:"relative",minWidth:0,overflow:"hidden"}}>
       {editing&&<button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>}
       <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"12px",cursor:editing?"default":"pointer",height:"100%"}}>
-        <div style={{marginBottom:6,overflow:"hidden"}}>
+        <div style={{marginBottom:6}}>
           <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
           <div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker.replace(".TW","")}</div>
         </div>
         <div style={{marginBottom:6}}><Spark data={s.sparkline} color={col} width="100%" height={40}/></div>
-        <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{s.name}</div>
+        <div style={{fontSize:13,fontWeight:900,color:C.text,fontFamily:C.mono,marginBottom:4}}>{sym}{s.price.toLocaleString()}</div>
         <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}>
           <span style={{fontSize:10}}>{up?"▲":"▼"}</span>
           <span style={{fontSize:12,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
@@ -1132,10 +1132,7 @@ export default function App(){
       const text=await callAI(prompt);
       const jsonMatch=text.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error("No JSON found");
-      let cleaned=jsonMatch[0]
-        .replace(/,\s*}/g,"}")
-        .replace(/,\s*]/g,"]")
-        .replace(/[\u0000-\u001F\u007F]/g," "); // 清理控制字符
+      const cleaned=jsonMatch[0].replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
       const parsed=JSON.parse(cleaned);
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const enrich=arr=>arr.map(r=>({
