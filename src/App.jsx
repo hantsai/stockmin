@@ -1132,8 +1132,11 @@ export default function App(){
       const text=await callAI(prompt);
       const jsonMatch=text.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error("No JSON found");
-      const cleaned=jsonMatch[0].replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
-      const parsed=JSON.parse(cleaned);
+      let cleaned=jsonMatch[0]
+        .replace(/,\s*}/g,"}")
+        .replace(/,\s*]/g,"]")
+        .replace(/[\u0000-\u001F\u007F]/g," "); // 清理控制字符
+      const parsed=JSON.parse(cleaned)；
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const enrich=arr=>arr.map(r=>({
         ...r,
