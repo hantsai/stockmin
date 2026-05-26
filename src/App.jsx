@@ -1136,7 +1136,7 @@ export default function App(){
         .replace(/,\s*}/g,"}")
         .replace(/,\s*]/g,"]")
         .replace(/[\u0000-\u001F\u007F]/g," "); // 清理控制字符
-      const parsed=JSON.parse(cleaned)；
+      const parsed=JSON.parse(cleaned);
       const techMap={};list.forEach((s,i)=>{techMap[s.ticker]=techR[i];});
       const enrich=arr=>arr.map(r=>({
         ...r,
