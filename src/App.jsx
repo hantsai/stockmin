@@ -198,12 +198,12 @@ function WatchCard({s,onTap,onRemove,editing}){
     <div style={{position:"relative"}}>
       {editing&&<button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>}
       <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"12px",cursor:editing?"default":"pointer",height:"100%"}}>
-        <div style={{marginBottom:6}}>
+        <div style={{marginBottom:6,overflow:"hidden"}}>
           <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
           <div style={{fontSize:10,color:C.sub,fontFamily:C.mono}}>{s.ticker.replace(".TW","")}</div>
         </div>
         <div style={{marginBottom:6}}><Spark data={s.sparkline} color={col} width="100%" height={40}/></div>
-        <div style={{fontSize:13,fontWeight:900,color:C.text,fontFamily:C.mono,marginBottom:4}}>{sym}{s.price.toLocaleString()}</div>
+        <div style={{fontSize:13,fontWeight:800,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{s.name}</div>
         <div style={{background:bg,border:`1px solid ${bd}`,borderRadius:6,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}>
           <span style={{fontSize:10}}>{up?"▲":"▼"}</span>
           <span style={{fontSize:12,fontWeight:900,color:col,fontFamily:C.mono}}>{Math.abs(s.pct)}%</span>
