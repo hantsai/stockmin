@@ -563,7 +563,7 @@ function AddSheet({existing,onAdd,onClose}){
         <div style={{fontSize:18,fontWeight:800,color:C.text,marginBottom:16}}>新增自選股</div>
         <div style={{display:"flex",gap:8,marginBottom:6}}>
           <input value={val} onChange={e=>handleInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&check()} placeholder="輸入代號或中文名稱，如台積電、AAPL"
-            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:14,outline:"none",fontFamily:C.sans}}/>
+            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:16,outline:"none",fontFamily:C.sans}}/>
           <button onClick={check} disabled={checking} style={{padding:"12px 18px",borderRadius:12,border:"none",background:C.green,color:C.bg,fontWeight:800,fontSize:14,cursor:"pointer"}}>{checking?"...":"加入"}</button>
         </div>
         {/* 搜尋結果 */}
