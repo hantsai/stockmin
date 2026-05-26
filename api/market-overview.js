@@ -49,15 +49,13 @@ export default async function handler(req, res) {
   ]);
   const indices = { twii, dji, sp500, ixic, sox, n225, ks11, dxy, twd };
 
-  // ── Step 2：TWSE 三大法人（T86，個股總合計）────────────────────────────────
-  // 欄位：[0]代號 [1]名稱 [2]外資買 [3]外資賣 [4]外資買賣超 [5]外資自營買
-  // [6]外資自營賣 [7]外資自營超 [8]投信買 [9]投信賣 [10]投信買賣超
-  // [11]自營買賣超(合計) [12]自營買(自行) [13]自營賣(自行) [14]自營超(自行)
-  // [15]自營買(避險) [16]自營賣(避險) [17]自營超(避險) [18]三大合計
+  // ── Step 2：TWSE 三大法人（TWT38U，市場合計）─────────────────────────────
+  // 欄位：[0]機構 [1]買進(千元) [2]賣出(千元) [3]買賣差額(千元)
+  //       外資/投信/自營各佔一行，最後一行是合計
   let institutionals = null;
   try {
     const r = await fetch(
-      "https://www.twse.com.tw/rwd/zh/fund/T86?response=json&selectType=ALL&_=" + Date.now(),
+      "https://www.twse.com.tw/rwd/zh/fund/BFI82U?response=json&type=day&_=" + Date.now(),
       { headers:{"User-Agent":"Mozilla/5.0"}, signal: AbortSignal.timeout(6000) }
     );
     if (r.ok) {
@@ -65,21 +63,25 @@ export default async function handler(req, res) {
       const rows = data.data || [];
       const toNum = s => {
         if (!s) return 0;
-        const n = parseInt(s.replace(/,/g,""));
+        const n = parseInt((s||"0").replace(/,/g,"").replace(/\+/g,""));
         return isNaN(n) ? 0 : n;
       };
-      // 找「合計」行，通常在最後幾行
-      const total = rows.find(row => row[0]==="合計" || row[1]==="合計");
-      if (total) {
-        institutionals = {
-          foreign: toNum(total[4]),   // 外陸資買賣超（不含自營）
-          trust:   toNum(total[10]),  // 投信買賣超
-          dealer:  toNum(total[11]),  // 自營商買賣超（合計）
-          total:   toNum(total[18]),  // 三大法人合計
-        };
+      // BFI82U 欄位：[0]類別 [1]買進 [2]賣出 [3]差額(千元)
+      // 找各機構那行
+      const foreignRow = rows.find(r => r[0] && (r[0].includes("外陸資") || r[0].includes("外資")));
+      const trustRow   = rows.find(r => r[0] && r[0].includes("投信"));
+      const dealerRow  = rows.find(r => r[0] && r[0].includes("自營"));
+      const totalRow   = rows.find(r => r[0] && r[0].includes("合計"));
+
+      if (foreignRow || totalRow) {
+        const foreign = toNum(foreignRow?.[3]);
+        const trust   = toNum(trustRow?.[3]);
+        const dealer  = toNum(dealerRow?.[3]);
+        const total   = totalRow ? toNum(totalRow[3]) : foreign + trust + dealer;
+        institutionals = { foreign, trust, dealer, total };
       }
     }
-  } catch(e) { console.log("T86 error:", e.message); }
+  } catch(e) { console.log("BFI82U error:", e.message); }
 
   // ── Step 3：TWSE 類股指數漲跌（MI_INDEX，取漲幅前5大類股）──────────────
   // 欄位：[0]指數名稱 [1]收盤指數 [2]漲跌HTML [3]漲跌點數 [4]漲跌百分比(%) [5]特殊處理
