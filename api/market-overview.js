@@ -1,4 +1,4 @@
-// api/market-overview.js — 抓取大盤指數、三大法人、類股資料
+// api/market-overview.js
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const tw = new Date(twStr);
   const hour = tw.getHours();
   const minute = tw.getMinutes();
-  const day = tw.getDay(); // 0=日,1=一...6=六
+  const day = tw.getDay();
   const timeStr = `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
   const dateStr = tw.toLocaleDateString("zh-TW", {
     timeZone: "Asia/Taipei",
@@ -43,20 +43,17 @@ export default async function handler(req, res) {
   };
 
   const [twii, dji, sp500, ixic, sox, n225, ks11, dxy, twd] = await Promise.all([
-    fetchOne("^TWII"),
-    fetchOne("^DJI"),
-    fetchOne("^GSPC"),
-    fetchOne("^IXIC"),
-    fetchOne("^SOX"),
-    fetchOne("^N225"),
-    fetchOne("^KS11"),
-    fetchOne("DX-Y.NYB"),
-    fetchOne("TWD=X"),
+    fetchOne("^TWII"), fetchOne("^DJI"), fetchOne("^GSPC"),
+    fetchOne("^IXIC"), fetchOne("^SOX"), fetchOne("^N225"),
+    fetchOne("^KS11"), fetchOne("DX-Y.NYB"), fetchOne("TWD=X"),
   ]);
-
   const indices = { twii, dji, sp500, ixic, sox, n225, ks11, dxy, twd };
 
-  // ── Step 2：TWSE 三大法人（T86 端點）──────────────────────────────────────
+  // ── Step 2：TWSE 三大法人（T86，個股總合計）────────────────────────────────
+  // 欄位：[0]代號 [1]名稱 [2]外資買 [3]外資賣 [4]外資買賣超 [5]外資自營買
+  // [6]外資自營賣 [7]外資自營超 [8]投信買 [9]投信賣 [10]投信買賣超
+  // [11]自營買賣超(合計) [12]自營買(自行) [13]自營賣(自行) [14]自營超(自行)
+  // [15]自營買(避險) [16]自營賣(避險) [17]自營超(避險) [18]三大合計
   let institutionals = null;
   try {
     const r = await fetch(
@@ -66,43 +63,27 @@ export default async function handler(req, res) {
     if (r.ok) {
       const data = await r.json();
       const rows = data.data || [];
-      // 找「合計」那行（最後一行通常是合計）
-      const total = rows.find(row => row[0]==="合計") || rows[rows.length-1];
-      if (total && total.length >= 10) {
-        const toNum = s => parseInt((s||"0").replace(/,/g,"").replace(/\+/g,"")) || 0;
-        // T86 欄位：[0]機構, [1]買進金額, [2]賣出金額, [3]買賣差額, ...
-        // 但格式可能因日期不同，用買賣差額欄位
-        const foreign = toNum(total[3]);  // 外資買賣差額
-        const trust   = toNum(total[6]);  // 投信買賣差額
-        const dealer  = toNum(total[9]);  // 自營買賣差額
-        institutionals = { foreign, trust, dealer, total: foreign + trust + dealer };
+      const toNum = s => {
+        if (!s) return 0;
+        const n = parseInt(s.replace(/,/g,""));
+        return isNaN(n) ? 0 : n;
+      };
+      // 找「合計」行，通常在最後幾行
+      const total = rows.find(row => row[0]==="合計" || row[1]==="合計");
+      if (total) {
+        institutionals = {
+          foreign: toNum(total[4]),   // 外陸資買賣超（不含自營）
+          trust:   toNum(total[10]),  // 投信買賣超
+          dealer:  toNum(total[11]),  // 自營商買賣超（合計）
+          total:   toNum(total[18]),  // 三大法人合計
+        };
       }
     }
   } catch(e) { console.log("T86 error:", e.message); }
 
-  // 若 T86 失敗，嘗試 TWT38U
-  if (!institutionals) {
-    try {
-      const r = await fetch(
-        "https://www.twse.com.tw/rwd/zh/fund/TWT38U?response=json&_=" + Date.now(),
-        { headers:{"User-Agent":"Mozilla/5.0"}, signal: AbortSignal.timeout(6000) }
-      );
-      if (r.ok) {
-        const data = await r.json();
-        const rows = data.data || [];
-        const total = rows.find(row => row[0]==="合計");
-        if (total) {
-          const toNum = s => parseInt((s||"0").replace(/,/g,"")) || 0;
-          const foreign = toNum(total[4]) - toNum(total[5]);
-          const trust   = toNum(total[9]) - toNum(total[10]);
-          const dealer  = toNum(total[14])- toNum(total[15]);
-          institutionals = { foreign, trust, dealer, total: foreign + trust + dealer };
-        }
-      }
-    } catch(e) { console.log("TWT38U error:", e.message); }
-  }
-
-  // ── Step 3：TWSE 類股指數（MI_INDEX，取漲幅前5大）────────────────────────
+  // ── Step 3：TWSE 類股指數漲跌（MI_INDEX，取漲幅前5大類股）──────────────
+  // 欄位：[0]指數名稱 [1]收盤指數 [2]漲跌HTML [3]漲跌點數 [4]漲跌百分比(%) [5]特殊處理
+  // 類股名稱格式：xxx類指數
   let topSectors = [];
   try {
     const r = await fetch(
@@ -111,33 +92,25 @@ export default async function handler(req, res) {
     );
     if (r.ok) {
       const data = await r.json();
-      // MI_INDEX 回傳多個 tables，找 fields 包含「指數」的
       const tables = data.tables || [];
       let rows = [];
-      for (const t of tables) {
-        if (t.fields && t.fields.some(f => f.includes("指數") || f.includes("類股"))) {
-          rows = rows.concat(t.data || []);
-        }
-      }
-      // 若沒找到，取所有 data
-      if (rows.length === 0) {
-        tables.forEach(t => { if(t.data) rows = rows.concat(t.data); });
-      }
+      tables.forEach(t => { if(t.data) rows = rows.concat(t.data); });
 
       const parsed = rows
-        .filter(row => row.length >= 4 && row[0] && !row[0].includes("發行量"))
-        .map(row => {
-          // 欄位：[指數名稱, 收市指數, 漲跌(點), 漲跌幅(%)]
-          const pctStr = (row[3]||row[2]||"0").replace(/[+%,]/g,"");
-          const pct = parseFloat(pctStr) || 0;
-          // 用漲跌幅絕對值排序找強勢類股
-          return { name: row[0], pct, absPct: Math.abs(pct) };
-        })
-        .filter(s => s.name && s.name.length > 1);
+        .filter(row =>
+          row.length >= 5 &&
+          row[0] &&
+          row[0].endsWith("類指數") // 只取真正的類股
+        )
+        .map(row => ({
+          name: row[0].replace("類指數",""), // 去掉「類指數」讓名稱簡短
+          pct:  parseFloat((row[4]||"0").replace(/[+%,]/g,"")) || 0,
+        }))
+        .filter(s => !isNaN(s.pct));
 
-      // 按漲幅排序取前5（只取上漲的）
+      // 按漲幅排序取前5
       parsed.sort((a,b) => b.pct - a.pct);
-      topSectors = parsed.slice(0,5).map(s => ({ name:s.name, pct:s.pct }));
+      topSectors = parsed.slice(0,5);
     }
   } catch(e) { console.log("MI_INDEX error:", e.message); }
 
