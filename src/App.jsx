@@ -195,7 +195,7 @@ function WatchCard({s,onTap,onRemove,editing}){
   const up=s.pct>=0,col=up?C.green:C.red,bg=up?C.greenBg:C.redBg,bd=up?C.greenBd:C.redBd;
   const sym=s.currency==="TWD"?"NT$":"$";
   return(
-    <div style={{position:"relative",minWidth:0,overflow:"hidden"}}>
+    <div style={{position:"relative",minWidth:0}}>
       {editing&&<button onClick={()=>onRemove(s.ticker)} style={{position:"absolute",top:-5,left:-5,zIndex:10,width:20,height:20,borderRadius:"50%",border:"none",background:C.red,color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>}
       <div onClick={()=>!editing&&onTap(s)} style={{background:C.card,border:`1px solid ${editing?C.dim:C.border}`,borderRadius:14,padding:"12px",cursor:editing?"default":"pointer",height:"100%"}}>
         <div style={{marginBottom:6}}>
@@ -563,7 +563,7 @@ function AddSheet({existing,onAdd,onClose}){
         <div style={{fontSize:18,fontWeight:800,color:C.text,marginBottom:16}}>新增自選股</div>
         <div style={{display:"flex",gap:8,marginBottom:6}}>
           <input value={val} onChange={e=>handleInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&check()} placeholder="輸入代號或中文名稱，如台積電、AAPL"
-            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:16,outline:"none",fontFamily:C.sans}}/>
+            style={{flex:1,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:C.card,color:C.text,fontSize:14,outline:"none",fontFamily:C.sans}}/>
           <button onClick={check} disabled={checking} style={{padding:"12px 18px",borderRadius:12,border:"none",background:C.green,color:C.bg,fontWeight:800,fontSize:14,cursor:"pointer"}}>{checking?"...":"加入"}</button>
         </div>
         {/* 搜尋結果 */}
